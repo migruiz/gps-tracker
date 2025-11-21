@@ -6,12 +6,15 @@ export async function POST(request: NextRequest) {
     const data: LocationData = await request.json();
     
     // Validate required fields
-    if (!data.latitude || !data.longitude || !data.timestamp || !data.device_id) {
+    if (!data.latitude || !data.longitude || !data.device_id) {
       return NextResponse.json(
         { error: 'Missing required fields' },
         { status: 400 }
       );
     }
+
+    // Force timestamp to now
+    data.timestamp = Date.now();
 
     // Store the location
     locationStore.addLocation(data);
