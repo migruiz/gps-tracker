@@ -93,11 +93,7 @@ class ConnectivityManager(private val context: Context) {
                 if (enabled) 1 else 0
             )
 
-            // Broadcast the change
-            val intent = android.content.Intent(android.content.Intent.ACTION_AIRPLANE_MODE_CHANGED)
-            intent.putExtra("state", enabled)
-            context.sendBroadcast(intent)
-
+            // Android will automatically broadcast the change - no need to send broadcast manually
             Log.d(TAG, "Airplane mode ${if (enabled) "enabled" else "disabled"}")
         } catch (e: Exception) {
             Log.e(TAG, "Error setting airplane mode", e)
