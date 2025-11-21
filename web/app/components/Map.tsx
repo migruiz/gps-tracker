@@ -55,6 +55,7 @@ export default function Map() {
             center: { lat: 53.27652744, lng: -6.47575287 },
             zoom: 15,
             mapTypeId: 'roadmap',
+            gestureHandling: 'greedy',
           });
           console.log('Map created successfully');
           setIsMapLoaded(true);
@@ -248,20 +249,6 @@ export default function Map() {
         </div>
       )}
       <div ref={mapRef} style={{ width: '100%', height: '100%' }} />
-      <div className="absolute top-4 left-4 bg-white p-4 rounded shadow-lg">
-        <h2 className="font-bold text-lg mb-2">GPS Tracker</h2>
-        <p className="text-sm text-gray-600">
-          Tracking: {locations.length > 0 ? locations[0].device_id : 'No data'}
-        </p>
-        <p className="text-sm text-gray-600">
-          Points: {locations.length}
-        </p>
-        {locations.length > 0 && (
-          <p className="text-sm text-gray-600">
-            Last update: {formatTimeAgo(Date.now() - locations[locations.length - 1].timestamp)}
-          </p>
-        )}
-      </div>
     </div>
   );
 }
