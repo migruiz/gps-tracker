@@ -21,7 +21,7 @@ class LocationManager(private val context: Context) {
     private var isTracking = false
 
     interface LocationUpdateListener {
-        fun onLocationUpdate(location: Location)
+        fun onLocationUpdate(location: Location, provider: String)
         fun onLocationError(error: String)
     }
 
@@ -51,8 +51,9 @@ class LocationManager(private val context: Context) {
 
         locationListener = object : LocationListener {
             override fun onLocationChanged(location: Location) {
-                Log.d(TAG, "Location update: ${location.latitude}, ${location.longitude}")
-                listener?.onLocationUpdate(location)
+                val provider = location.provider ?: "unknown"
+                Log.d(TAG, "Location update from $provider: ${location.latitude}, ${location.longitude}")
+                listener?.onLocationUpdate(location, provider)
             }
 
             @Deprecated("Deprecated in Java")

@@ -95,15 +95,16 @@ class GpsTrackingService : Service() {
 
     private fun setupLocationListener() {
         locationManager.setLocationUpdateListener(object : LocationManager.LocationUpdateListener {
-            override fun onLocationUpdate(location: Location) {
+            override fun onLocationUpdate(location: Location, provider: String) {
                 if (currentState == AppState.AWAKE) {
                     httpClient.publishLocation(
                         location.latitude,
                         location.longitude,
                         location.accuracy,
-                        location.time
+                        location.time,
+                        provider
                     )
-                    updateNotification("Location sent: ${location.latitude}, ${location.longitude}")
+                    updateNotification("Location sent ($provider): ${location.latitude}, ${location.longitude}")
                     broadcastStateUpdate()
                 }
             }
