@@ -5,7 +5,7 @@ setlocal enabledelayedexpansion
 :: Requires Docker CLI
 
 set "SCRIPT_DIR=%~dp0"
-set "IMAGE_NAME=tenjotech/gps-tracker:latest"
+set "IMAGE_NAME=migruiz/gps-tracker:latest"
 set "CONTAINER_NAME=gps-tracker-web"
 set "DOCKERFILE_DIR=%SCRIPT_DIR%"
 set "HOST_PORT=3000"

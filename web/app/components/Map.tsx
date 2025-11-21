@@ -178,7 +178,7 @@ export default function Map() {
         geodesic: true,
         strokeColor: '#0000FF',
         strokeOpacity: 0.8,
-        strokeWeight: 3,
+        strokeWeight: 2,
         map: map,
       });
 
@@ -189,7 +189,7 @@ export default function Map() {
           map: map,
           icon: {
             path: google.maps.SymbolPath.CIRCLE,
-            scale: 5,
+            scale: 3,
             fillColor: '#0000FF',
             fillOpacity: 0.7,
             strokeColor: '#FFFFFF',

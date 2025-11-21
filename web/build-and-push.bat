@@ -5,7 +5,7 @@ setlocal enabledelayedexpansion
 :: Requires Docker CLI and a Docker Hub access token stored in dockerhub_credentials.txt
 
 set "SCRIPT_DIR=%~dp0"
-set "IMAGE_NAME=tenjotech/gps-tracker:latest"
+set "IMAGE_NAME=migruiz/gps-tracker:latest"
 set "DOCKERFILE_DIR=%SCRIPT_DIR%"
 set "CREDENTIALS_FILE=%SCRIPT_DIR%dockerhub_credentials.txt"
 set "ENV_FILE=%SCRIPT_DIR%.env.local"
