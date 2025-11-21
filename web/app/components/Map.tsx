@@ -150,6 +150,22 @@ export default function Map() {
     // Store interval for cleanup
     (currentMarkerRef.current as any).animationInterval = animationInterval;
 
+    // Add red dot at center of current location
+    const currentDotMarker = new google.maps.Marker({
+      position: { lat: currentLocation.latitude, lng: currentLocation.longitude },
+      map: map,
+      icon: {
+        path: google.maps.SymbolPath.CIRCLE,
+        scale: 5,
+        fillColor: '#FF0000',
+        fillOpacity: 1.0,
+        strokeColor: '#FFFFFF',
+        strokeWeight: 1,
+      },
+      zIndex: 1000,
+    });
+    markersRef.current.push(currentDotMarker);
+
     // Create path with blue lines
     if (locations.length > 1) {
       const path = locations.map(loc => ({
@@ -208,9 +224,6 @@ export default function Map() {
         markersRef.current.push(marker);
       });
     }
-
-    // Center map on current location
-    map.setCenter({ lat: currentLocation.latitude, lng: currentLocation.longitude });
 
     // Cleanup animation on unmount
     return () => {
