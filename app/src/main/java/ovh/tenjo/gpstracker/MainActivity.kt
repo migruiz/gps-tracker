@@ -75,8 +75,9 @@ class MainActivity : ComponentActivity() {
         // Register broadcast receiver
         val filter = IntentFilter(GpsTrackingService.ACTION_STATE_UPDATE)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(stateUpdateReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+            registerReceiver(stateUpdateReceiver, filter, RECEIVER_NOT_EXPORTED)
         } else {
+            @Suppress("UnspecifiedRegisterReceiverFlag")
             registerReceiver(stateUpdateReceiver, filter)
         }
 
@@ -135,8 +136,13 @@ class MainActivity : ComponentActivity() {
         )
 
         // Add background location for Android 10+
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             permissions.add(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+        }
+        
+        // Add foreground service location for Android 14+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            permissions.add(Manifest.permission.FOREGROUND_SERVICE_LOCATION)
         }
 
         val permissionsToRequest = permissions.filter {
@@ -144,8 +150,10 @@ class MainActivity : ComponentActivity() {
         }
 
         if (permissionsToRequest.isNotEmpty()) {
+            Log.d(TAG, "Requesting permissions: $permissionsToRequest")
             permissionLauncher.launch(permissionsToRequest.toTypedArray())
         } else {
+            Log.d(TAG, "All permissions already granted")
             startTrackingService()
         }
     }
@@ -167,6 +175,12 @@ class MainActivity : ComponentActivity() {
 
     private fun updateStateInfo() {
         stateInfo = trackingService?.getStateInfo()
+    }
+
+    private fun showPermissionError() {
+        // Update UI to show error - for now just log
+        Log.e(TAG, "Cannot start tracking - permissions not granted")
+        // You could show a dialog or snackbar here
     }
 
     companion object {
