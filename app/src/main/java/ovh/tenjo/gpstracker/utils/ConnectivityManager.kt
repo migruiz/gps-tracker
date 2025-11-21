@@ -4,12 +4,12 @@ import android.annotation.SuppressLint
 import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.content.Context
-import android.net.ConnectivityManager
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.provider.Settings
 import android.util.Log
 import ovh.tenjo.gpstracker.admin.DeviceAdminReceiver
+import java.lang.reflect.Method
 
 class ConnectivityManager(private val context: Context) {
 
@@ -41,10 +41,31 @@ class ConnectivityManager(private val context: Context) {
         }
 
         try {
-            devicePolicyManager.setMobileDataEnabled(adminComponent, enabled)
-            Log.d(TAG, "Mobile data ${if (enabled) "enabled" else "disabled"}")
+            // Use reflection to access hidden API for mobile data control
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                val method: Method = android.net.ConnectivityManager::class.java.getDeclaredMethod(
+                    "setMobileDataEnabled",
+                    Boolean::class.javaPrimitiveType
+                )
+                method.isAccessible = true
+                method.invoke(connectivityManager, enabled)
+                Log.d(TAG, "Mobile data ${if (enabled) "enabled" else "disabled"}")
+            } else {
+                Log.w(TAG, "Mobile data control not supported on this API level")
+            }
         } catch (e: Exception) {
-            Log.e(TAG, "Error setting mobile data state", e)
+            Log.e(TAG, "Error setting mobile data state: ${e.message}", e)
+            // Fallback: Try using Settings.Global (requires WRITE_SECURE_SETTINGS)
+            try {
+                Settings.Global.putInt(
+                    context.contentResolver,
+                    "mobile_data",
+                    if (enabled) 1 else 0
+                )
+                Log.d(TAG, "Mobile data ${if (enabled) "enabled" else "disabled"} via Settings")
+            } catch (e2: Exception) {
+                Log.e(TAG, "Fallback mobile data control also failed", e2)
+            }
         }
     }
 
@@ -83,16 +104,28 @@ class ConnectivityManager(private val context: Context) {
         }
     }
 
+    @Suppress("DEPRECATION")
     fun isWifiConnected(): Boolean {
-        val networkInfo = connectivityManager.activeNetworkInfo
-        return networkInfo != null && networkInfo.isConnected &&
-               networkInfo.type == android.net.ConnectivityManager.TYPE_WIFI
+        return try {
+            val networkInfo = connectivityManager.activeNetworkInfo
+            networkInfo != null && networkInfo.isConnected &&
+                   networkInfo.type == android.net.ConnectivityManager.TYPE_WIFI
+        } catch (e: Exception) {
+            Log.e(TAG, "Error checking WiFi connection", e)
+            false
+        }
     }
 
+    @Suppress("DEPRECATION")
     fun isMobileDataConnected(): Boolean {
-        val networkInfo = connectivityManager.activeNetworkInfo
-        return networkInfo != null && networkInfo.isConnected &&
-               networkInfo.type == android.net.ConnectivityManager.TYPE_MOBILE
+        return try {
+            val networkInfo = connectivityManager.activeNetworkInfo
+            networkInfo != null && networkInfo.isConnected &&
+                   networkInfo.type == android.net.ConnectivityManager.TYPE_MOBILE
+        } catch (e: Exception) {
+            Log.e(TAG, "Error checking mobile data connection", e)
+            false
+        }
     }
 
     fun restrictBackgroundData() {
@@ -103,6 +136,7 @@ class ConnectivityManager(private val context: Context) {
 
         try {
             // Get all installed packages and restrict their background data
+            @Suppress("DEPRECATION")
             val packages = context.packageManager.getInstalledApplications(0)
             for (packageInfo in packages) {
                 if (packageInfo.packageName != context.packageName) {
@@ -114,7 +148,7 @@ class ConnectivityManager(private val context: Context) {
                                 putBoolean("background_data", false)
                             }
                         )
-                    } catch (e: Exception) {
+                    } catch (_: Exception) {
                         // Some system packages may not allow restrictions
                     }
                 }
@@ -138,11 +172,15 @@ class ConnectivityManager(private val context: Context) {
                 arrayOf(context.packageName)
             )
 
-            // Disable keyguard
-            devicePolicyManager.setKeyguardDisabled(adminComponent, true)
+            // Disable keyguard (API 23+)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                devicePolicyManager.setKeyguardDisabled(adminComponent, true)
+            }
 
-            // Disable status bar
-            devicePolicyManager.setStatusBarDisabled(adminComponent, true)
+            // Disable status bar (API 23+)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                devicePolicyManager.setStatusBarDisabled(adminComponent, true)
+            }
 
             Log.d(TAG, "Kiosk mode enabled")
         } catch (e: Exception) {
@@ -154,4 +192,3 @@ class ConnectivityManager(private val context: Context) {
         private const val TAG = "ConnectivityManager"
     }
 }
-
