@@ -8,7 +8,7 @@ object AppConfig {
     const val VERBOSE_LOGGING = true // Extra detailed logs
 
     // HTTP API Configuration
-    const val API_ENDPOINT = "https://tenjo.requestcatcher.com/test" // Changed to HTTP
+    const val API_ENDPOINT = "https://3000-mr.tenjo.ovh/api/location" // Changed to HTTP
     const val DEVICE_ID = "gps-tracker-device"
 
     // GPS Configuration
