@@ -12,7 +12,7 @@ import ovh.tenjo.gpstracker.R
 import ovh.tenjo.gpstracker.config.AppConfig
 import ovh.tenjo.gpstracker.location.LocationManager
 import ovh.tenjo.gpstracker.model.AppState
-import ovh.tenjo.gpstracker.mqtt.MqttManager
+import ovh.tenjo.gpstracker.mqtt.HttpApiClient
 import ovh.tenjo.gpstracker.utils.BatteryMonitor
 import ovh.tenjo.gpstracker.utils.ConnectivityManager
 import java.util.*
@@ -20,7 +20,7 @@ import java.util.*
 class GpsTrackingService : Service() {
 
     private lateinit var locationManager: LocationManager
-    private lateinit var mqttManager: MqttManager
+    private lateinit var httpClient: HttpApiClient
     private lateinit var batteryMonitor: BatteryMonitor
     private lateinit var connectivityManager: ConnectivityManager
 
@@ -55,12 +55,12 @@ class GpsTrackingService : Service() {
         Log.d(TAG, "Service created")
 
         locationManager = LocationManager(this)
-        mqttManager = MqttManager(this)
+        httpClient = HttpApiClient(this)
         batteryMonitor = BatteryMonitor(this)
         connectivityManager = ConnectivityManager(this)
 
         setupLocationListener()
-        setupMqttCallback()
+        setupHttpCallback()
 
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, createNotification("Initializing..."))
@@ -88,7 +88,7 @@ class GpsTrackingService : Service() {
         handler.removeCallbacks(batteryCheckRunnable)
 
         locationManager.stopLocationUpdates()
-        mqttManager.disconnect()
+        httpClient.disconnect()
 
         releaseWakeLock()
     }
@@ -97,7 +97,7 @@ class GpsTrackingService : Service() {
         locationManager.setLocationUpdateListener(object : LocationManager.LocationUpdateListener {
             override fun onLocationUpdate(location: Location) {
                 if (currentState == AppState.AWAKE) {
-                    mqttManager.publishLocation(
+                    httpClient.publishLocation(
                         location.latitude,
                         location.longitude,
                         location.accuracy,
@@ -115,23 +115,23 @@ class GpsTrackingService : Service() {
         })
     }
 
-    private fun setupMqttCallback() {
-        mqttManager.setConnectionCallback(object : MqttManager.ConnectionCallback {
+    private fun setupHttpCallback() {
+        httpClient.setConnectionCallback(object : HttpApiClient.ConnectionCallback {
             override fun onConnected() {
-                Log.d(TAG, "MQTT connected")
-                updateNotification("MQTT Connected")
+                Log.d(TAG, "HTTP client ready")
+                updateNotification("HTTP Ready")
                 broadcastStateUpdate()
             }
 
             override fun onDisconnected() {
-                Log.d(TAG, "MQTT disconnected")
-                updateNotification("MQTT Disconnected")
+                Log.d(TAG, "HTTP client disconnected")
+                updateNotification("HTTP Disconnected")
                 broadcastStateUpdate()
             }
 
             override fun onError(error: String) {
-                Log.e(TAG, "MQTT error: $error")
-                updateNotification("MQTT Error: $error")
+                Log.e(TAG, "HTTP error: $error")
+                updateNotification("HTTP Error: $error")
             }
         })
     }
@@ -160,8 +160,8 @@ class GpsTrackingService : Service() {
         connectivityManager.setMobileDataEnabled(true)
         Thread.sleep(2000) // Wait for mobile data to enable
 
-        // Connect to MQTT
-        mqttManager.connect()
+        // Connect HTTP client (just marks as ready)
+        httpClient.connect()
 
         // Start GPS tracking
         locationManager.startLocationUpdates()
@@ -177,8 +177,8 @@ class GpsTrackingService : Service() {
         // Stop GPS tracking
         locationManager.stopLocationUpdates()
 
-        // Disconnect MQTT
-        mqttManager.disconnect()
+        // Disconnect HTTP client
+        httpClient.disconnect()
 
         // Disable connectivity to save battery
         connectivityManager.setMobileDataEnabled(false)
@@ -198,30 +198,25 @@ class GpsTrackingService : Service() {
         val batteryInfo = batteryMonitor.getBatteryInfo()
 
         // Try WiFi first, then mobile data
-        var networkEnabled = false
-
         if (connectivityManager.isWifiConnected()) {
-            networkEnabled = true
+            // WiFi available, use it
         } else {
             // Enable mobile data temporarily
             connectivityManager.setAirplaneMode(false)
             Thread.sleep(2000)
             connectivityManager.setMobileDataEnabled(true)
             Thread.sleep(3000) // Wait for connection
-            networkEnabled = true
         }
 
-        if (networkEnabled) {
-            // Connect to MQTT if not already connected
-            if (!mqttManager.isConnected()) {
-                mqttManager.connect()
-                Thread.sleep(3000) // Wait for MQTT connection
-            }
+        // Connect HTTP client if not already
+        if (!httpClient.isConnected()) {
+            httpClient.connect()
+            Thread.sleep(1000)
+        }
 
-            // Send battery warning if below threshold
-            if (batteryInfo.level <= AppConfig.BATTERY_LOW_THRESHOLD && !batteryInfo.isCharging) {
-                mqttManager.publishBatteryWarning(batteryInfo.level, batteryInfo.isCharging)
-            }
+        // Send battery warning if below threshold
+        if (batteryInfo.level <= AppConfig.BATTERY_LOW_THRESHOLD && !batteryInfo.isCharging) {
+            httpClient.publishBatteryWarning(batteryInfo.level, batteryInfo.isCharging)
         }
 
         // Return to previous state
@@ -229,7 +224,7 @@ class GpsTrackingService : Service() {
 
         // If was idle, disable network again
         if (previousState == AppState.IDLE) {
-            mqttManager.disconnect()
+            httpClient.disconnect()
             connectivityManager.setMobileDataEnabled(false)
             connectivityManager.setAirplaneMode(true)
         }
@@ -305,9 +300,9 @@ class GpsTrackingService : Service() {
         val batteryInfo = batteryMonitor.getBatteryInfo()
         return StateInfo(
             state = currentState,
-            mqttConnected = mqttManager.isConnected(),
-            mqttBroker = mqttManager.getBrokerUrl(),
-            mqttClientId = mqttManager.getClientId(),
+            httpConnected = httpClient.isConnected(),
+            apiEndpoint = httpClient.getBrokerUrl(),
+            deviceId = httpClient.getClientId(),
             gpsTracking = locationManager.isTracking(),
             batteryLevel = batteryInfo.level,
             isCharging = batteryInfo.isCharging,
@@ -317,9 +312,9 @@ class GpsTrackingService : Service() {
 
     data class StateInfo(
         val state: AppState,
-        val mqttConnected: Boolean,
-        val mqttBroker: String,
-        val mqttClientId: String,
+        val httpConnected: Boolean,
+        val apiEndpoint: String,
+        val deviceId: String,
         val gpsTracking: Boolean,
         val batteryLevel: Int,
         val isCharging: Boolean,

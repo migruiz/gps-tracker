@@ -7,13 +7,9 @@ object AppConfig {
     const val DEBUG_MODE = true // Set to false for production
     const val VERBOSE_LOGGING = true // Extra detailed logs
 
-    // MQTT Configuration
-    const val MQTT_BROKER_URL = "wss://mqtt.tenjo.ovh:443"
-    const val MQTT_CLIENT_ID = "gps-tracker-android-device"
-    const val MQTT_USERNAME = "pi"
-    const val MQTT_PASSWORD = "hackol37"
-    const val MQTT_TOPIC_LOCATION = "gps/location"
-    const val MQTT_TOPIC_BATTERY = "gps/battery/warning"
+    // HTTP API Configuration
+    const val API_ENDPOINT = "https://tenjo.requestcatcher.com/test"
+    const val DEVICE_ID = "gps-tracker-device"
 
     // GPS Configuration
     const val GPS_UPDATE_INTERVAL_MS = 30000L // 30 seconds
@@ -26,7 +22,7 @@ object AppConfig {
     // Awake Time Slots (hardcoded schedule)
     val AWAKE_TIME_SLOTS = listOf(
         TimeSlot(8, 0, 9, 0),     // 08:00 -> 09:00
-        TimeSlot(11, 0, 15, 0),   // 14:00 -> 15:00
+        TimeSlot(14, 0, 15, 0),   // 14:00 -> 15:00
         TimeSlot(18, 0, 19, 0)    // 18:00 -> 19:00
     )
 

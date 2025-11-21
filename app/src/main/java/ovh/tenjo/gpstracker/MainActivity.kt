@@ -298,7 +298,7 @@ fun DebugUI(stateInfo: GpsTrackingService.StateInfo?) {
             }
         }
 
-        // MQTT Info (only show when awake)
+        // HTTP Info (only show when awake)
         if (stateInfo?.state == AppState.AWAKE) {
             Card(
                 modifier = Modifier
@@ -307,7 +307,7 @@ fun DebugUI(stateInfo: GpsTrackingService.StateInfo?) {
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        text = "MQTT Connection",
+                        text = "HTTP API Connection",
                         style = MaterialTheme.typography.titleMedium
                     )
 
@@ -319,22 +319,22 @@ fun DebugUI(stateInfo: GpsTrackingService.StateInfo?) {
                             modifier = Modifier
                                 .size(16.dp)
                                 .background(
-                                    if (stateInfo?.mqttConnected == true) Color.Green else Color.Red
+                                    if (stateInfo?.httpConnected == true) Color.Green else Color.Red
                                 )
                         )
                         Text(
-                            text = if (stateInfo?.mqttConnected == true) "Connected" else "Disconnected",
+                            text = if (stateInfo?.httpConnected == true) "Ready" else "Not Ready",
                             style = MaterialTheme.typography.bodyLarge
                         )
                     }
 
                     Text(
-                        text = "Broker: ${stateInfo?.mqttBroker ?: "N/A"}",
+                        text = "Endpoint: ${stateInfo?.apiEndpoint ?: "N/A"}",
                         style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier.padding(top = 4.dp)
                     )
                     Text(
-                        text = "Client ID: ${stateInfo?.mqttClientId ?: "N/A"}",
+                        text = "Device ID: ${stateInfo?.deviceId ?: "N/A"}",
                         style = MaterialTheme.typography.bodySmall
                     )
                 }

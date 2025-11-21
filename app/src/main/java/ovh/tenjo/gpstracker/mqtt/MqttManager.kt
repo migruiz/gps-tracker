@@ -2,15 +2,24 @@ package ovh.tenjo.gpstracker.mqtt
 
 import android.content.Context
 import android.util.Log
-import org.eclipse.paho.android.service.MqttAndroidClient
-import org.eclipse.paho.client.mqttv3.*
-import org.json.JSONObject
+import com.google.gson.Gson
+import okhttp3.*
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 import ovh.tenjo.gpstracker.config.AppConfig
+import java.io.IOException
+import java.util.concurrent.TimeUnit
 
-class MqttManager(private val context: Context) {
+class HttpApiClient(private val context: Context) {
 
-    private var mqttClient: MqttAndroidClient? = null
-    private var isConnected = false
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(30, TimeUnit.SECONDS)
+        .writeTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
+        .build()
+
+    private val gson = Gson()
+    private val JSON = "application/json; charset=utf-8".toMediaType()
 
     interface ConnectionCallback {
         fun onConnected()
@@ -19,175 +28,87 @@ class MqttManager(private val context: Context) {
     }
 
     private var connectionCallback: ConnectionCallback? = null
+    private var isConnected = false
 
     fun setConnectionCallback(callback: ConnectionCallback) {
         this.connectionCallback = callback
     }
 
     fun connect() {
-        try {
-            if (isConnected) {
-                Log.d(TAG, "Already connected")
-                return
-            }
-
-            // Create MQTT client with WSS support
-            mqttClient = MqttAndroidClient(
-                context,
-                AppConfig.MQTT_BROKER_URL,
-                AppConfig.MQTT_CLIENT_ID
-            )
-
-            val options = MqttConnectOptions().apply {
-                userName = AppConfig.MQTT_USERNAME
-                password = AppConfig.MQTT_PASSWORD.toCharArray()
-                isCleanSession = true
-                connectionTimeout = 30
-                keepAliveInterval = 60
-                isAutomaticReconnect = true
-
-                // Enable SSL/TLS for WSS connections
-                socketFactory = javax.net.ssl.SSLSocketFactory.getDefault()
-            }
-
-            mqttClient?.setCallback(object : MqttCallback {
-                override fun connectionLost(cause: Throwable?) {
-                    Log.w(TAG, "Connection lost", cause)
-                    isConnected = false
-                    connectionCallback?.onDisconnected()
-                }
-
-                override fun messageArrived(topic: String?, message: MqttMessage?) {
-                    // Not expecting incoming messages for this app
-                    Log.d(TAG, "Message arrived on topic: $topic")
-                }
-
-                override fun deliveryComplete(token: IMqttDeliveryToken?) {
-                    Log.v(TAG, "Message delivered")
-                }
-            })
-
-            Log.d(TAG, "Connecting to MQTT broker: ${AppConfig.MQTT_BROKER_URL}")
-
-            mqttClient?.connect(options, null, object : IMqttActionListener {
-                override fun onSuccess(asyncActionToken: IMqttToken?) {
-                    Log.d(TAG, "Successfully connected to MQTT broker")
-                    isConnected = true
-                    connectionCallback?.onConnected()
-                }
-
-                override fun onFailure(asyncActionToken: IMqttToken?, exception: Throwable?) {
-                    Log.e(TAG, "Failed to connect to MQTT broker", exception)
-                    isConnected = false
-                    connectionCallback?.onError(exception?.message ?: "Connection failed")
-                }
-            })
-
-        } catch (e: Exception) {
-            Log.e(TAG, "Error connecting to MQTT", e)
-            isConnected = false
-            connectionCallback?.onError(e.message ?: "Unknown error")
-        }
+        // For HTTP, we don't need persistent connection
+        // Just mark as "connected" immediately
+        Log.d(TAG, "HTTP client ready: ${AppConfig.API_ENDPOINT}")
+        isConnected = true
+        connectionCallback?.onConnected()
     }
 
     fun disconnect() {
-        try {
-            if (mqttClient?.isConnected == true) {
-                mqttClient?.disconnect(null, object : IMqttActionListener {
-                    override fun onSuccess(asyncActionToken: IMqttToken?) {
-                        Log.d(TAG, "Disconnected from MQTT broker")
-                        isConnected = false
-                        connectionCallback?.onDisconnected()
-                    }
-
-                    override fun onFailure(asyncActionToken: IMqttToken?, exception: Throwable?) {
-                        Log.e(TAG, "Error disconnecting from MQTT", exception)
-                    }
-                })
-            }
-            mqttClient?.unregisterResources()
-            mqttClient?.close()
-        } catch (e: Exception) {
-            Log.e(TAG, "Error during disconnect", e)
-        }
+        Log.d(TAG, "HTTP client disconnected")
+        isConnected = false
+        connectionCallback?.onDisconnected()
     }
 
     fun publishLocation(latitude: Double, longitude: Double, accuracy: Float, timestamp: Long) {
-        if (!isConnected || mqttClient?.isConnected != true) {
-            Log.w(TAG, "Cannot publish - not connected")
-            return
-        }
+        val data = mapOf(
+            "type" to "location",
+            "latitude" to latitude,
+            "longitude" to longitude,
+            "accuracy" to accuracy,
+            "timestamp" to timestamp,
+            "device_id" to AppConfig.DEVICE_ID
+        )
 
-        try {
-            val payload = JSONObject().apply {
-                put("latitude", latitude)
-                put("longitude", longitude)
-                put("accuracy", accuracy)
-                put("timestamp", timestamp)
-                put("device_id", AppConfig.MQTT_CLIENT_ID)
-            }
-
-            val message = MqttMessage(payload.toString().toByteArray()).apply {
-                qos = 1
-                isRetained = false
-            }
-
-            mqttClient?.publish(AppConfig.MQTT_TOPIC_LOCATION, message, null, object : IMqttActionListener {
-                override fun onSuccess(asyncActionToken: IMqttToken?) {
-                    Log.d(TAG, "Published location: $latitude, $longitude")
-                }
-
-                override fun onFailure(asyncActionToken: IMqttToken?, exception: Throwable?) {
-                    Log.e(TAG, "Failed to publish location", exception)
-                }
-            })
-
-        } catch (e: Exception) {
-            Log.e(TAG, "Error publishing location", e)
-        }
+        postData(data, "location")
     }
 
     fun publishBatteryWarning(batteryLevel: Int, isCharging: Boolean) {
-        if (!isConnected || mqttClient?.isConnected != true) {
-            Log.w(TAG, "Cannot publish battery warning - not connected")
-            return
-        }
+        val data = mapOf(
+            "type" to "battery_warning",
+            "battery_level" to batteryLevel,
+            "is_charging" to isCharging,
+            "timestamp" to System.currentTimeMillis(),
+            "device_id" to AppConfig.DEVICE_ID
+        )
 
-        try {
-            val payload = JSONObject().apply {
-                put("battery_level", batteryLevel)
-                put("is_charging", isCharging)
-                put("timestamp", System.currentTimeMillis())
-                put("device_id", AppConfig.MQTT_CLIENT_ID)
-            }
-
-            val message = MqttMessage(payload.toString().toByteArray()).apply {
-                qos = 1
-                isRetained = false
-            }
-
-            mqttClient?.publish(AppConfig.MQTT_TOPIC_BATTERY, message, null, object : IMqttActionListener {
-                override fun onSuccess(asyncActionToken: IMqttToken?) {
-                    Log.d(TAG, "Published battery warning: $batteryLevel%")
-                }
-
-                override fun onFailure(asyncActionToken: IMqttToken?, exception: Throwable?) {
-                    Log.e(TAG, "Failed to publish battery warning", exception)
-                }
-            })
-
-        } catch (e: Exception) {
-            Log.e(TAG, "Error publishing battery warning", e)
-        }
+        postData(data, "battery")
     }
 
-    fun isConnected(): Boolean = isConnected && (mqttClient?.isConnected == true)
+    private fun postData(data: Map<String, Any>, dataType: String) {
+        val json = gson.toJson(data)
+        val body = json.toRequestBody(JSON)
 
-    fun getBrokerUrl(): String = AppConfig.MQTT_BROKER_URL
+        val request = Request.Builder()
+            .url(AppConfig.API_ENDPOINT)
+            .post(body)
+            .addHeader("Content-Type", "application/json")
+            .addHeader("User-Agent", "GPS-Tracker-Android")
+            .build()
 
-    fun getClientId(): String = AppConfig.MQTT_CLIENT_ID
+        client.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                Log.e(TAG, "Failed to post $dataType data: ${e.message}", e)
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                response.use {
+                    if (response.isSuccessful) {
+                        Log.d(TAG, "Successfully posted $dataType data: ${response.code}")
+                        Log.v(TAG, "Response: ${response.body?.string()}")
+                    } else {
+                        Log.e(TAG, "Failed to post $dataType data: ${response.code} ${response.message}")
+                    }
+                }
+            }
+        })
+    }
+
+    fun isConnected(): Boolean = isConnected
+
+    fun getBrokerUrl(): String = AppConfig.API_ENDPOINT
+
+    fun getClientId(): String = AppConfig.DEVICE_ID
 
     companion object {
-        private const val TAG = "MqttManager"
+        private const val TAG = "HttpApiClient"
     }
 }
