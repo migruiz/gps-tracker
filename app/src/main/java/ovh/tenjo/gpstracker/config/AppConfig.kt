@@ -22,7 +22,7 @@ object AppConfig {
     // Awake Time Slots (hardcoded schedule)
     val AWAKE_TIME_SLOTS = listOf(
         TimeSlot(8, 0, 9, 0),     // 08:00 -> 09:00
-        TimeSlot(14, 0, 15, 0),   // 14:00 -> 15:00
+        TimeSlot(11, 0, 15, 0),   // 14:00 -> 15:00
         TimeSlot(18, 0, 19, 0)    // 18:00 -> 19:00
     )
 
