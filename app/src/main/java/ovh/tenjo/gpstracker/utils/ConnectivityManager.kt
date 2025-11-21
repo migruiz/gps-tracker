@@ -33,96 +33,10 @@ class ConnectivityManager(private val context: Context) {
         return devicePolicyManager.isDeviceOwnerApp(context.packageName)
     }
 
-    @SuppressLint("MissingPermission")
-    fun setMobileDataEnabled(enabled: Boolean) {
-        if (!isDeviceOwner()) {
-            Log.w(TAG, "Cannot control mobile data - not device owner")
-            return
-        }
 
-        try {
-            // Use reflection to access hidden API for mobile data control
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                val method: Method = android.net.ConnectivityManager::class.java.getDeclaredMethod(
-                    "setMobileDataEnabled",
-                    Boolean::class.javaPrimitiveType
-                )
-                method.isAccessible = true
-                method.invoke(connectivityManager, enabled)
-                Log.d(TAG, "Mobile data ${if (enabled) "enabled" else "disabled"}")
-            } else {
-                Log.w(TAG, "Mobile data control not supported on this API level")
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error setting mobile data state: ${e.message}", e)
-            // Fallback: Try using Settings.Global (requires WRITE_SECURE_SETTINGS)
-            try {
-                Settings.Global.putInt(
-                    context.contentResolver,
-                    "mobile_data",
-                    if (enabled) 1 else 0
-                )
-                Log.d(TAG, "Mobile data ${if (enabled) "enabled" else "disabled"} via Settings")
-            } catch (e2: Exception) {
-                Log.e(TAG, "Fallback mobile data control also failed", e2)
-            }
-        }
-    }
 
-    fun setWifiEnabled(enabled: Boolean) {
-        try {
-            @Suppress("DEPRECATION")
-            wifiManager.isWifiEnabled = enabled
-            Log.d(TAG, "WiFi ${if (enabled) "enabled" else "disabled"}")
-        } catch (e: Exception) {
-            Log.e(TAG, "Error setting WiFi state", e)
-        }
-    }
 
-    @SuppressLint("MissingPermission")
-    fun setAirplaneMode(enabled: Boolean) {
-        if (!isDeviceOwner()) {
-            Log.w(TAG, "Cannot control airplane mode - not device owner")
-            return
-        }
 
-        try {
-            Settings.Global.putInt(
-                context.contentResolver,
-                Settings.Global.AIRPLANE_MODE_ON,
-                if (enabled) 1 else 0
-            )
-
-            // Android will automatically broadcast the change - no need to send broadcast manually
-            Log.d(TAG, "Airplane mode ${if (enabled) "enabled" else "disabled"}")
-        } catch (e: Exception) {
-            Log.e(TAG, "Error setting airplane mode", e)
-        }
-    }
-
-    @Suppress("DEPRECATION")
-    fun isWifiConnected(): Boolean {
-        return try {
-            val networkInfo = connectivityManager.activeNetworkInfo
-            networkInfo != null && networkInfo.isConnected &&
-                   networkInfo.type == android.net.ConnectivityManager.TYPE_WIFI
-        } catch (e: Exception) {
-            Log.e(TAG, "Error checking WiFi connection", e)
-            false
-        }
-    }
-
-    @Suppress("DEPRECATION")
-    fun isMobileDataConnected(): Boolean {
-        return try {
-            val networkInfo = connectivityManager.activeNetworkInfo
-            networkInfo != null && networkInfo.isConnected &&
-                   networkInfo.type == android.net.ConnectivityManager.TYPE_MOBILE
-        } catch (e: Exception) {
-            Log.e(TAG, "Error checking mobile data connection", e)
-            false
-        }
-    }
 
     fun restrictBackgroundData() {
         if (!isDeviceOwner()) {
@@ -145,6 +59,7 @@ class ConnectivityManager(private val context: Context) {
                             }
                         )
                     } catch (_: Exception) {
+                        Log.d(TAG, "Error restricting background data for ${packageInfo.packageName}")
                         // Some system packages may not allow restrictions
                     }
                 }

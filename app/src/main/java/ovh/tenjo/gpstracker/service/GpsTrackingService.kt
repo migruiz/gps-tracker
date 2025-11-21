@@ -155,11 +155,7 @@ class GpsTrackingService : Service() {
         Log.d(TAG, "Transitioning to AWAKE state")
         currentState = AppState.AWAKE
 
-        // Enable connectivity
-        connectivityManager.setAirplaneMode(false)
-        Thread.sleep(2000) // Wait for airplane mode to disable
-        connectivityManager.setMobileDataEnabled(true)
-        Thread.sleep(2000) // Wait for mobile data to enable
+
 
         // Connect HTTP client (just marks as ready)
         httpClient.connect()
@@ -181,10 +177,7 @@ class GpsTrackingService : Service() {
         // Disconnect HTTP client
         httpClient.disconnect()
 
-        // Disable connectivity to save battery
-        connectivityManager.setMobileDataEnabled(false)
-        connectivityManager.setWifiEnabled(false)
-        connectivityManager.setAirplaneMode(true)
+
 
         updateNotification("IDLE - Power saving mode")
         broadcastStateUpdate()
@@ -198,16 +191,7 @@ class GpsTrackingService : Service() {
 
         val batteryInfo = batteryMonitor.getBatteryInfo()
 
-        // Try WiFi first, then mobile data
-        if (connectivityManager.isWifiConnected()) {
-            // WiFi available, use it
-        } else {
-            // Enable mobile data temporarily
-            connectivityManager.setAirplaneMode(false)
-            Thread.sleep(2000)
-            connectivityManager.setMobileDataEnabled(true)
-            Thread.sleep(3000) // Wait for connection
-        }
+
 
         // Connect HTTP client if not already
         if (!httpClient.isConnected()) {
@@ -226,8 +210,6 @@ class GpsTrackingService : Service() {
         // If was idle, disable network again
         if (previousState == AppState.IDLE) {
             httpClient.disconnect()
-            connectivityManager.setMobileDataEnabled(false)
-            connectivityManager.setAirplaneMode(true)
         }
 
         broadcastStateUpdate()
