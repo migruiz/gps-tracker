@@ -12,7 +12,7 @@ object AppConfig {
     const val DEVICE_ID = "gps-tracker-device"
 
     // GPS Configuration
-    const val GPS_UPDATE_INTERVAL_MS = 30000L // 30 seconds
+    const val GPS_UPDATE_INTERVAL_MS = 10000L // 30 seconds
     const val GPS_FASTEST_INTERVAL_MS = 15000L // 15 seconds
 
     // Battery Configuration
