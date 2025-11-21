@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.ActivityManager
 import android.content.*
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
 import android.util.Log
@@ -73,7 +74,11 @@ class MainActivity : ComponentActivity() {
 
         // Register broadcast receiver
         val filter = IntentFilter(GpsTrackingService.ACTION_STATE_UPDATE)
-        registerReceiver(stateUpdateReceiver, filter)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(stateUpdateReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            registerReceiver(stateUpdateReceiver, filter)
+        }
 
         setContent {
             GPSTrackerTheme {
