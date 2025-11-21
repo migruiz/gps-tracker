@@ -3,6 +3,10 @@ package ovh.tenjo.gpstracker.config
 import ovh.tenjo.gpstracker.model.TimeSlot
 
 object AppConfig {
+    // Debug Configuration
+    const val DEBUG_MODE = true // Set to false for production
+    const val VERBOSE_LOGGING = true // Extra detailed logs
+
     // MQTT Configuration
     const val MQTT_BROKER_URL = "wss://your-mqtt-broker.com:8883"
     const val MQTT_CLIENT_ID = "gps-tracker-device"
@@ -31,4 +35,3 @@ object AppConfig {
         return AWAKE_TIME_SLOTS.any { it.isInTimeSlot(hour, minute) }
     }
 }
-
