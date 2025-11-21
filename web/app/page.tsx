@@ -2,7 +2,7 @@ import Map from './components/Map';
 
 export default function Home() {
   return (
-    <main className="h-screen w-screen">
+    <main style={{ width: '100vw', height: '100vh', margin: 0, padding: 0 }}>
       <Map />
     </main>
   );

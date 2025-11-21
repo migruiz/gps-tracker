@@ -20,12 +20,14 @@ export default function Map() {
   const pathLineRef = useRef<google.maps.Polyline | null>(null);
   const markersRef = useRef<google.maps.Marker[]>([]);
   const [locations, setLocations] = useState<LocationData[]>([]);
+  const [isMapLoaded, setIsMapLoaded] = useState(false);
 
   // Fetch initial locations
   const fetchLocations = async () => {
     try {
       const response = await fetch('/api/locations');
       const data = await response.json();
+      console.log('Fetched locations:', data);
       setLocations(data);
     } catch (error) {
       console.error('Error fetching locations:', error);
@@ -35,20 +37,27 @@ export default function Map() {
   // Initialize map
   useEffect(() => {
     const initMap = async () => {
+      const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+      console.log('Initializing map with API key:', apiKey ? 'present' : 'missing');
+      
       const loader = new Loader({
-        apiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '',
+        apiKey: apiKey || '',
         version: 'weekly',
       });
 
       try {
         await loader.load();
+        console.log('Google Maps loaded successfully');
 
         if (mapRef.current && !googleMapRef.current) {
+          console.log('Creating map instance');
           googleMapRef.current = new google.maps.Map(mapRef.current, {
             center: { lat: 53.27652744, lng: -6.47575287 },
             zoom: 15,
             mapTypeId: 'roadmap',
           });
+          console.log('Map created successfully');
+          setIsMapLoaded(true);
         }
       } catch (error) {
         console.error('Error loading Google Maps:', error);
@@ -87,10 +96,15 @@ export default function Map() {
 
   // Update map when locations change
   useEffect(() => {
-    if (!googleMapRef.current || locations.length === 0) return;
+    console.log('Locations updated:', locations.length, 'points');
+    if (!googleMapRef.current || locations.length === 0) {
+      console.log('Skipping map update - map:', !!googleMapRef.current, 'locations:', locations.length);
+      return;
+    }
 
     const map = googleMapRef.current;
     const currentLocation = locations[locations.length - 1];
+    console.log('Updating map with current location:', currentLocation);
 
     // Clear existing markers
     markersRef.current.forEach(marker => marker.setMap(null));
@@ -220,8 +234,20 @@ export default function Map() {
   };
 
   return (
-    <div className="relative w-full h-full">
-      <div ref={mapRef} className="w-full h-full" />
+    <div style={{ width: '100%', height: '100%', position: 'relative' }}>
+      {!isMapLoaded && (
+        <div style={{
+          position: 'absolute',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          fontSize: '18px',
+          color: '#666'
+        }}>
+          Loading map...
+        </div>
+      )}
+      <div ref={mapRef} style={{ width: '100%', height: '100%' }} />
       <div className="absolute top-4 left-4 bg-white p-4 rounded shadow-lg">
         <h2 className="font-bold text-lg mb-2">GPS Tracker</h2>
         <p className="text-sm text-gray-600">
