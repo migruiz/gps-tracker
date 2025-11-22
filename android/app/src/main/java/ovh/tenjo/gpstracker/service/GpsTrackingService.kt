@@ -80,6 +80,7 @@ class GpsTrackingService : Service() {
             updateNotification("Hiding non-critical apps...")
 
             // Run in background thread to avoid blocking service startup
+            /*
             Thread {
                 val result = appHidingManager.hideNonCriticalApps()
                 Log.i(TAG, "App hiding completed: ${result.message}")
@@ -88,6 +89,8 @@ class GpsTrackingService : Service() {
                     updateNotification("Hidden ${result.successCount} apps - System optimized")
                 }
             }.start()
+            */
+
         }
 
         // Start state checking
@@ -307,7 +310,7 @@ class GpsTrackingService : Service() {
             batteryLevel = batteryInfo.level,
             isCharging = batteryInfo.isCharging,
             isDeviceOwner = connectivityManager.isDeviceOwner(),
-            hiddenAppsCount = appHidingManager.getHiddenAppsCount()
+            hiddenAppsCount = 0//appHidingManager.getHiddenAppsCount()
         )
     }
 

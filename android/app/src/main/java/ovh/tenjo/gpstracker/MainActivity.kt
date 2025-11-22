@@ -198,16 +198,28 @@ class MainActivity : ComponentActivity() {
     }
 
     public fun startSinkholeVpn() {
-        // Check if VPN permission is already granted
-        val prepareIntent = VpnService.prepare(this)
-        if (prepareIntent != null) {
-            // Need to request VPN permission
-            Log.d(TAG, "Requesting VPN permission")
-            vpnPermissionLauncher.launch(prepareIntent)
-        } else {
-            // Permission already granted, start VPN directly
-            Log.d(TAG, "VPN permission already granted")
-            startVpnServiceInternal()
+        try {
+            // Check if VPN permission is already granted
+            // For Device Owner apps, this will return null (permission already granted)
+            val prepareIntent = VpnService.prepare(this)
+            if (prepareIntent != null) {
+                // Need to request VPN permission (normal app mode)
+                Log.d(TAG, "Requesting VPN permission via dialog")
+                try {
+                    vpnPermissionLauncher.launch(prepareIntent)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to launch VPN permission dialog", e)
+                    // If dialog launch fails, try to start service anyway
+                    // (might work if Device Owner)
+                    startVpnServiceInternal()
+                }
+            } else {
+                // Permission already granted (Device Owner or previously authorized)
+                Log.d(TAG, "VPN permission already granted (Device Owner or previously authorized)")
+                startVpnServiceInternal()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error starting VPN", e)
         }
     }
 

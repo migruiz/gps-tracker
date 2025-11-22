@@ -43,6 +43,7 @@
 
     <application
         android:allowBackup="true"
+        android:testOnly="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
@@ -88,14 +89,12 @@
         <service
             android:name=".location.SinkholeVpnService"
             android:permission="android.permission.BIND_VPN_SERVICE"
-            android:exported="true"
-            android:foregroundServiceType="connectedDevice">
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.net.VpnService" />
             </intent-filter>
         </service>
     </application>
 
-    <uses-permission android:name="android.permission.BIND_VPN_SERVICE" />
 
 </manifest>
