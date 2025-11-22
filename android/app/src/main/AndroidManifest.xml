@@ -88,7 +88,8 @@
         <service
             android:name=".location.SinkholeVpnService"
             android:permission="android.permission.BIND_VPN_SERVICE"
-            android:exported="true">
+            android:exported="true"
+            android:foregroundServiceType="connectedDevice">
             <intent-filter>
                 <action android:name="android.net.VpnService" />
             </intent-filter>

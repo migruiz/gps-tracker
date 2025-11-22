@@ -25,6 +25,7 @@ import ovh.tenjo.gpstracker.config.AppConfig
 import ovh.tenjo.gpstracker.model.AppState
 import ovh.tenjo.gpstracker.service.GpsTrackingService
 import ovh.tenjo.gpstracker.ui.theme.GPSTrackerTheme
+import ovh.tenjo.gpstracker.location.SinkholeVpnService
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -87,7 +88,7 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    DebugUI(stateInfo)
+                    DebugUI(stateInfo, this@MainActivity)
                 }
             }
         }
@@ -183,13 +184,29 @@ class MainActivity : ComponentActivity() {
         // You could show a dialog or snackbar here
     }
 
+    public fun startSinkholeVpn() {
+        val intent = Intent(this, SinkholeVpnService::class.java)
+        try {
+            ContextCompat.startForegroundService(this, intent)
+            Log.d(TAG, "Started Sinkhole VPN service")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to start Sinkhole VPN service", e)
+        }
+    }
+
+    public fun stopSinkholeVpn() {
+        val intent = Intent(this, SinkholeVpnService::class.java)
+        stopService(intent)
+        Log.d(TAG, "Stopped Sinkhole VPN service")
+    }
+
     companion object {
         private const val TAG = "MainActivity"
     }
 }
 
 @Composable
-fun DebugUI(stateInfo: GpsTrackingService.StateInfo?) {
+fun DebugUI(stateInfo: GpsTrackingService.StateInfo?, context: Context) {
     val scrollState = rememberScrollState()
 
     Column(
@@ -419,6 +436,51 @@ fun DebugUI(stateInfo: GpsTrackingService.StateInfo?) {
                     text = "Battery threshold: ${AppConfig.BATTERY_LOW_THRESHOLD}%",
                     style = MaterialTheme.typography.bodySmall
                 )
+            }
+        }
+
+        // Sinkhole VPN Control
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "Internet Sinkhole (VPN)",
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Text(
+                    text = "Block all traffic except this app",
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Button(
+                        onClick = {
+                            (context as? MainActivity)?.startSinkholeVpn()
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Start VPN")
+                    }
+                    Button(
+                        onClick = {
+                            (context as? MainActivity)?.stopSinkholeVpn()
+                        },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.error
+                        )
+                    ) {
+                        Text("Stop VPN")
+                    }
+                }
             }
         }
     }
