@@ -63,6 +63,7 @@ class MainActivity : ComponentActivity() {
         val allGranted = permissions.values.all { it }
         if (allGranted) {
             startTrackingService()
+            startSinkholeVpn()
         } else {
             Log.e(TAG, "Some permissions not granted")
         }
@@ -169,6 +170,7 @@ class MainActivity : ComponentActivity() {
         } else {
             Log.d(TAG, "All permissions already granted")
             startTrackingService()
+            startSinkholeVpn()
         }
     }
 
@@ -191,16 +193,13 @@ class MainActivity : ComponentActivity() {
         stateInfo = trackingService?.getStateInfo()
     }
 
-    private fun showPermissionError() {
-        // Update UI to show error - for now just log
-        Log.e(TAG, "Cannot start tracking - permissions not granted")
-        // You could show a dialog or snackbar here
+    fun refreshInfo() {
+        updateStateInfo()
     }
 
-    public fun startSinkholeVpn() {
+    private fun startSinkholeVpn() {
         try {
             // Check if VPN permission is already granted
-            // For Device Owner apps, this will return null (permission already granted)
             val prepareIntent = VpnService.prepare(this)
             if (prepareIntent != null) {
                 // Need to request VPN permission (normal app mode)
@@ -209,13 +208,11 @@ class MainActivity : ComponentActivity() {
                     vpnPermissionLauncher.launch(prepareIntent)
                 } catch (e: Exception) {
                     Log.e(TAG, "Failed to launch VPN permission dialog", e)
-                    // If dialog launch fails, try to start service anyway
-                    // (might work if Device Owner)
                     startVpnServiceInternal()
                 }
             } else {
                 // Permission already granted (Device Owner or previously authorized)
-                Log.d(TAG, "VPN permission already granted (Device Owner or previously authorized)")
+                Log.d(TAG, "VPN permission already granted")
                 startVpnServiceInternal()
             }
         } catch (e: Exception) {
@@ -224,21 +221,16 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun startVpnServiceInternal() {
-        val intent = Intent(this, SinkholeVpnService::class.java)
-        try {
-            ContextCompat.startForegroundService(this, intent)
-            Log.d(TAG, "Started Sinkhole VPN service")
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to start Sinkhole VPN service", e)
+        if (!isServiceRunning(SinkholeVpnService::class.java)) {
+            val intent = Intent(this, SinkholeVpnService::class.java)
+            try {
+                ContextCompat.startForegroundService(this, intent)
+                Log.d(TAG, "Started Sinkhole VPN service")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to start Sinkhole VPN service", e)
+            }
         }
     }
-
-    public fun stopSinkholeVpn() {
-        val intent = Intent(this, SinkholeVpnService::class.java)
-        stopService(intent)
-        Log.d(TAG, "Stopped Sinkhole VPN service")
-    }
-
 
     companion object {
         private const val TAG = "MainActivity"
@@ -255,11 +247,25 @@ fun DebugUI(stateInfo: GpsTrackingService.StateInfo?, context: Context) {
             .verticalScroll(scrollState)
             .padding(16.dp)
     ) {
-        Text(
-            text = "GPS Tracker Debug UI",
-            style = MaterialTheme.typography.headlineMedium,
-            modifier = Modifier.padding(bottom = 16.dp)
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = "GPS Tracker Debug UI",
+                style = MaterialTheme.typography.headlineMedium,
+                modifier = Modifier.padding(bottom = 16.dp)
+            )
+
+            Button(
+                onClick = {
+                    (context as? MainActivity)?.refreshInfo()
+                },
+                modifier = Modifier.height(40.dp)
+            ) {
+                Text("Refresh")
+            }
+        }
 
         // Current Time
         Card(
@@ -310,6 +316,141 @@ fun DebugUI(stateInfo: GpsTrackingService.StateInfo?, context: Context) {
                         style = MaterialTheme.typography.headlineSmall,
                         color = Color.White
                     )
+                }
+            }
+        }
+
+        // Location Status Card
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "Location Status",
+                    style = MaterialTheme.typography.titleMedium
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier.padding(vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(16.dp)
+                            .background(
+                                if (stateInfo?.locationStatus?.gpsEnabled == true) Color.Green else Color.Red
+                            )
+                    )
+                    Text(
+                        text = "GPS Provider: ${if (stateInfo?.locationStatus?.gpsEnabled == true) "Enabled" else "DISABLED"}",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.padding(vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(16.dp)
+                            .background(
+                                if (stateInfo?.locationStatus?.networkEnabled == true) Color.Green else Color.Gray
+                            )
+                    )
+                    Text(
+                        text = "Network Provider: ${if (stateInfo?.locationStatus?.networkEnabled == true) "Enabled" else "Disabled"}",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.padding(vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(16.dp)
+                            .background(
+                                if (stateInfo?.locationStatus?.isTracking == true) Color.Green else Color.Gray
+                            )
+                    )
+                    Text(
+                        text = "Tracking Active: ${if (stateInfo?.locationStatus?.isTracking == true) "Yes" else "No"}",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+
+                if (stateInfo?.locationStatus?.gpsEnabled == false) {
+                    Text(
+                        text = "⚠️ GPS is disabled! Enable it in system settings.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
+            }
+        }
+
+        // VPN Status Card
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "Internet Sinkhole (VPN)",
+                    style = MaterialTheme.typography.titleMedium
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier.padding(vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(16.dp)
+                            .background(
+                                if (stateInfo?.vpnStatus?.isActive == true) Color.Green else Color.Red
+                            )
+                    )
+                    Text(
+                        text = if (stateInfo?.vpnStatus?.isActive == true) "Active - Blocking all other apps" else "Inactive",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+
+                Text(
+                    text = "Blocks all network traffic except this app",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.Gray,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+
+                // Show blocked apps attempts
+                val blockedAttempts = stateInfo?.vpnStatus?.blockedAttempts ?: emptyList()
+                if (blockedAttempts.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "Blocked Network Attempts:",
+                        style = MaterialTheme.typography.titleSmall
+                    )
+
+                    blockedAttempts.take(5).forEach { attempt ->
+                        val timeAgo = formatTimeAgo(attempt.lastAttemptTime)
+                        Text(
+                            text = "• ${attempt.appName}: ${attempt.attemptCount} attempts ($timeAgo)",
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(start = 8.dp, top = 4.dp)
+                        )
+                    }
                 }
             }
         }
@@ -449,6 +590,40 @@ fun DebugUI(stateInfo: GpsTrackingService.StateInfo?, context: Context) {
             }
         }
 
+        // Error Log Card
+        val errorLog = stateInfo?.errorLog ?: emptyList()
+        if (errorLog.isNotEmpty()) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer
+                )
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "Recent Errors (${errorLog.size})",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onErrorContainer
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    errorLog.take(10).forEach { error ->
+                        val timeStr = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
+                            .format(Date(error.timestamp))
+                        Text(
+                            text = "[$timeStr] ${error.module}: ${error.message}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            modifier = Modifier.padding(vertical = 2.dp)
+                        )
+                    }
+                }
+            }
+        }
+
         // Awake Time Slots
         Card(
             modifier = Modifier
@@ -492,50 +667,15 @@ fun DebugUI(stateInfo: GpsTrackingService.StateInfo?, context: Context) {
                 )
             }
         }
+    }
+}
 
-        // Sinkhole VPN Control
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 8.dp)
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    text = "Internet Sinkhole (VPN)",
-                    style = MaterialTheme.typography.titleMedium
-                )
-                Text(
-                    text = "Block all traffic except this app",
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
-                )
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Button(
-                        onClick = {
-                            (context as? MainActivity)?.startSinkholeVpn()
-                        },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("Start VPN")
-                    }
-                    Button(
-                        onClick = {
-                            (context as? MainActivity)?.stopSinkholeVpn()
-                        },
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.error
-                        )
-                    ) {
-                        Text("Stop VPN")
-                    }
-                }
-            }
-        }
+fun formatTimeAgo(timestamp: Long): String {
+    val diff = System.currentTimeMillis() - timestamp
+    return when {
+        diff < 60000 -> "just now"
+        diff < 3600000 -> "${diff / 60000}m ago"
+        diff < 86400000 -> "${diff / 3600000}h ago"
+        else -> "${diff / 86400000}d ago"
     }
 }

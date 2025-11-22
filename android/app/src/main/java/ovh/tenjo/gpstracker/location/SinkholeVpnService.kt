@@ -7,15 +7,48 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.VpnService
+import android.os.Binder
 import android.os.Build
 import android.os.IBinder
 import android.os.ParcelFileDescriptor
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import java.io.FileInputStream
+import java.io.FileOutputStream
+import java.nio.ByteBuffer
+import java.util.concurrent.ConcurrentHashMap
 
 class SinkholeVpnService : VpnService() {
 
     private var vpnInterface: ParcelFileDescriptor? = null
+    private var vpnThread: Thread? = null
+    @Volatile private var running = false
+
+    // Track blocked apps and their attempts
+    private val blockedAttempts = ConcurrentHashMap<String, BlockedAppInfo>()
+
+    data class BlockedAppInfo(
+        val appName: String,
+        val packageName: String,
+        var attemptCount: Int,
+        var lastAttemptTime: Long
+    )
+
+    private val binder = LocalBinder()
+
+    inner class LocalBinder : Binder() {
+        fun getService(): SinkholeVpnService = this@SinkholeVpnService
+    }
+
+    override fun onBind(intent: Intent?): IBinder = binder
+
+    fun getBlockedAttempts(): List<BlockedAppInfo> {
+        return blockedAttempts.values.sortedByDescending { it.lastAttemptTime }
+    }
+
+    fun isVpnActive(): Boolean {
+        return vpnInterface != null && running
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -56,6 +89,13 @@ class SinkholeVpnService : VpnService() {
 
             if (vpnInterface != null) {
                 Log.i(TAG, "Sinkhole VPN established successfully - all other apps blocked")
+
+                // Start packet monitoring thread
+                running = true
+                vpnThread = Thread(VpnRunnable()).apply {
+                    name = "VpnThread"
+                    start()
+                }
             } else {
                 Log.e(TAG, "Failed to establish VPN interface")
                 stopSelf()
@@ -68,8 +108,66 @@ class SinkholeVpnService : VpnService() {
         return Service.START_STICKY
     }
 
+    private inner class VpnRunnable : Runnable {
+        override fun run() {
+            val vpnFd = vpnInterface ?: return
+            val inputStream = FileInputStream(vpnFd.fileDescriptor)
+            val outputStream = FileOutputStream(vpnFd.fileDescriptor)
+            val packet = ByteBuffer.allocate(32767)
+
+            try {
+                while (running && !Thread.interrupted()) {
+                    packet.clear()
+                    val length = inputStream.read(packet.array())
+
+                    if (length > 0) {
+                        // Log packet attempt (simplified - real implementation would parse IP headers)
+                        logBlockedAttempt()
+
+                        // We don't forward the packet - it's blocked (sinkhole)
+                    } else if (length < 0) {
+                        break
+                    }
+                }
+            } catch (e: Exception) {
+                if (running) {
+                    Log.e(TAG, "Error in VPN thread", e)
+                }
+            }
+        }
+    }
+
+    private fun logBlockedAttempt() {
+        // Simplified: Just track that something tried to send data
+        // A full implementation would parse IP headers to identify the app
+        val timestamp = System.currentTimeMillis()
+
+        // For now, create a generic entry
+        val key = "blocked_apps"
+        blockedAttempts.compute(key) { _, existing ->
+            if (existing != null) {
+                existing.copy(
+                    attemptCount = existing.attemptCount + 1,
+                    lastAttemptTime = timestamp
+                )
+            } else {
+                BlockedAppInfo(
+                    appName = "Other Apps",
+                    packageName = "various",
+                    attemptCount = 1,
+                    lastAttemptTime = timestamp
+                )
+            }
+        }
+    }
+
     override fun onDestroy() {
         super.onDestroy()
+        running = false
+
+        vpnThread?.interrupt()
+        vpnThread = null
+
         try {
             vpnInterface?.close()
             vpnInterface = null
@@ -84,8 +182,6 @@ class SinkholeVpnService : VpnService() {
         Log.w(TAG, "VPN permission revoked")
         stopSelf()
     }
-
-    override fun onBind(intent: Intent?): IBinder? = null
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

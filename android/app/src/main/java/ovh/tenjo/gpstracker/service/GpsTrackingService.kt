@@ -1,9 +1,12 @@
 package ovh.tenjo.gpstracker.service
 
 import android.app.*
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.ServiceConnection
 import android.location.Location
+import android.location.LocationManager as AndroidLocationManager
 import android.os.*
 import android.util.Log
 import androidx.core.app.NotificationCompat
@@ -11,12 +14,15 @@ import ovh.tenjo.gpstracker.MainActivity
 import ovh.tenjo.gpstracker.R
 import ovh.tenjo.gpstracker.config.AppConfig
 import ovh.tenjo.gpstracker.location.LocationManager
+import ovh.tenjo.gpstracker.location.SinkholeVpnService
 import ovh.tenjo.gpstracker.model.AppState
 import ovh.tenjo.gpstracker.mqtt.HttpApiClient
 import ovh.tenjo.gpstracker.utils.BatteryMonitor
 import ovh.tenjo.gpstracker.utils.ConnectivityManager
 import ovh.tenjo.gpstracker.utils.AppHidingManager
+import java.text.SimpleDateFormat
 import java.util.*
+import java.util.concurrent.ConcurrentLinkedQueue
 
 class GpsTrackingService : Service() {
 
@@ -28,6 +34,35 @@ class GpsTrackingService : Service() {
 
     private var currentState: AppState = AppState.IDLE
     private var wakeLock: PowerManager.WakeLock? = null
+
+    // Error logging
+    private val errorLog = ConcurrentLinkedQueue<ErrorEntry>()
+    private val MAX_ERROR_LOG_SIZE = 50
+
+    data class ErrorEntry(
+        val timestamp: Long,
+        val module: String,
+        val message: String
+    )
+
+    // VPN service binding
+    private var vpnService: SinkholeVpnService? = null
+    private var vpnBound = false
+
+    private val vpnConnection = object : ServiceConnection {
+        override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+            val binder = service as SinkholeVpnService.LocalBinder
+            vpnService = binder.getService()
+            vpnBound = true
+            Log.d(TAG, "VPN service bound")
+        }
+
+        override fun onServiceDisconnected(name: ComponentName?) {
+            vpnService = null
+            vpnBound = false
+            Log.d(TAG, "VPN service unbound")
+        }
+    }
 
     private val handler = Handler(Looper.getMainLooper())
     private val stateCheckRunnable = object : Runnable {
@@ -70,6 +105,14 @@ class GpsTrackingService : Service() {
 
         acquireWakeLock()
 
+        // Bind to VPN service if running
+        try {
+            val intent = Intent(this, SinkholeVpnService::class.java)
+            bindService(intent, vpnConnection, Context.BIND_AUTO_CREATE)
+        } catch (e: Exception) {
+            logError("VPN", "Failed to bind VPN service: ${e.message}")
+        }
+
         // Setup kiosk mode if device owner
         if (connectivityManager.isDeviceOwner()) {
             connectivityManager.enableKioskMode()
@@ -110,7 +153,30 @@ class GpsTrackingService : Service() {
         locationManager.stopLocationUpdates()
         httpClient.disconnect()
 
+        // Unbind VPN service
+        if (vpnBound) {
+            try {
+                unbindService(vpnConnection)
+                vpnBound = false
+            } catch (e: Exception) {
+                Log.e(TAG, "Error unbinding VPN service", e)
+            }
+        }
+
         releaseWakeLock()
+    }
+
+    private fun logError(module: String, message: String) {
+        val error = ErrorEntry(System.currentTimeMillis(), module, message)
+        errorLog.offer(error)
+
+        // Keep log size manageable
+        while (errorLog.size > MAX_ERROR_LOG_SIZE) {
+            errorLog.poll()
+        }
+
+        Log.e(TAG, "[$module] $message")
+        broadcastStateUpdate()
     }
 
     private fun setupLocationListener() {
@@ -130,7 +196,7 @@ class GpsTrackingService : Service() {
             }
 
             override fun onLocationError(error: String) {
-                Log.e(TAG, "Location error: $error")
+                logError("Location", error)
                 updateNotification("Location error: $error")
             }
         })
@@ -151,7 +217,7 @@ class GpsTrackingService : Service() {
             }
 
             override fun onError(error: String) {
-                Log.e(TAG, "HTTP error: $error")
+                logError("HTTP", error)
                 updateNotification("HTTP Error: $error")
             }
         })
@@ -299,20 +365,60 @@ class GpsTrackingService : Service() {
 
     fun getCurrentState(): AppState = currentState
 
+    fun getLocationStatus(): LocationStatus {
+        val androidLocationManager = getSystemService(Context.LOCATION_SERVICE) as AndroidLocationManager
+        val gpsEnabled = androidLocationManager.isProviderEnabled(AndroidLocationManager.GPS_PROVIDER)
+        val networkEnabled = androidLocationManager.isProviderEnabled(AndroidLocationManager.NETWORK_PROVIDER)
+
+        return LocationStatus(
+            gpsEnabled = gpsEnabled,
+            networkEnabled = networkEnabled,
+            isTracking = locationManager.isTracking()
+        )
+    }
+
+    fun getVpnStatus(): VpnStatus {
+        return VpnStatus(
+            isActive = vpnService?.isVpnActive() ?: false,
+            blockedAttempts = vpnService?.getBlockedAttempts() ?: emptyList()
+        )
+    }
+
+    fun getErrorLog(): List<ErrorEntry> {
+        return errorLog.toList()
+    }
+
     fun getStateInfo(): StateInfo {
         val batteryInfo = batteryMonitor.getBatteryInfo()
+        val locationStatus = getLocationStatus()
+        val vpnStatus = getVpnStatus()
+
         return StateInfo(
             state = currentState,
             httpConnected = httpClient.isConnected(),
-            apiEndpoint = httpClient.getBrokerUrl(),
-            deviceId = httpClient.getClientId(),
+            apiEndpoint = AppConfig.API_ENDPOINT,
+            deviceId = AppConfig.DEVICE_ID,
             gpsTracking = locationManager.isTracking(),
             batteryLevel = batteryInfo.level,
             isCharging = batteryInfo.isCharging,
             isDeviceOwner = connectivityManager.isDeviceOwner(),
-            hiddenAppsCount = 0//appHidingManager.getHiddenAppsCount()
+            hiddenAppsCount = 0,//appHidingManager.getHiddenAppsCount()
+            locationStatus = locationStatus,
+            vpnStatus = vpnStatus,
+            errorLog = getErrorLog()
         )
     }
+
+    data class LocationStatus(
+        val gpsEnabled: Boolean,
+        val networkEnabled: Boolean,
+        val isTracking: Boolean
+    )
+
+    data class VpnStatus(
+        val isActive: Boolean,
+        val blockedAttempts: List<SinkholeVpnService.BlockedAppInfo>
+    )
 
     data class StateInfo(
         val state: AppState,
@@ -323,7 +429,10 @@ class GpsTrackingService : Service() {
         val batteryLevel: Int,
         val isCharging: Boolean,
         val isDeviceOwner: Boolean,
-        val hiddenAppsCount: Int
+        val hiddenAppsCount: Int,
+        val locationStatus: LocationStatus,
+        val vpnStatus: VpnStatus,
+        val errorLog: List<ErrorEntry>
     )
 
     companion object {
