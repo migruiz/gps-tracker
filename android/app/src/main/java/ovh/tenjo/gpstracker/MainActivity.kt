@@ -318,6 +318,20 @@ fun DebugUI(stateInfo: GpsTrackingService.StateInfo?, context: Context) {
                     style = MaterialTheme.typography.bodyLarge,
                     color = if (stateInfo?.isDeviceOwner == true) Color.Green else Color.Red
                 )
+
+                // Show hidden apps count if device owner
+                if (stateInfo?.isDeviceOwner == true) {
+                    Text(
+                        text = "Hidden Apps: ${stateInfo.hiddenAppsCount}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                    Text(
+                        text = "System Optimized for Battery",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.Gray
+                    )
+                }
             }
         }
 

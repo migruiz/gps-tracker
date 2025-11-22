@@ -15,6 +15,7 @@ import ovh.tenjo.gpstracker.model.AppState
 import ovh.tenjo.gpstracker.mqtt.HttpApiClient
 import ovh.tenjo.gpstracker.utils.BatteryMonitor
 import ovh.tenjo.gpstracker.utils.ConnectivityManager
+import ovh.tenjo.gpstracker.utils.AppHidingManager
 import java.util.*
 
 class GpsTrackingService : Service() {
@@ -23,6 +24,7 @@ class GpsTrackingService : Service() {
     private lateinit var httpClient: HttpApiClient
     private lateinit var batteryMonitor: BatteryMonitor
     private lateinit var connectivityManager: ConnectivityManager
+    private lateinit var appHidingManager: AppHidingManager
 
     private var currentState: AppState = AppState.IDLE
     private var wakeLock: PowerManager.WakeLock? = null
@@ -58,6 +60,7 @@ class GpsTrackingService : Service() {
         httpClient = HttpApiClient(this)
         batteryMonitor = BatteryMonitor(this)
         connectivityManager = ConnectivityManager(this)
+        appHidingManager = AppHidingManager(this)
 
         setupLocationListener()
         setupHttpCallback()
@@ -71,6 +74,20 @@ class GpsTrackingService : Service() {
         if (connectivityManager.isDeviceOwner()) {
             connectivityManager.enableKioskMode()
             connectivityManager.restrictBackgroundData()
+
+            // Nuclear app removal - hide all non-critical apps to save CPU/battery
+            Log.i(TAG, "Device owner detected - initiating nuclear app removal")
+            updateNotification("Hiding non-critical apps...")
+
+            // Run in background thread to avoid blocking service startup
+            Thread {
+                val result = appHidingManager.hideNonCriticalApps()
+                Log.i(TAG, "App hiding completed: ${result.message}")
+
+                handler.post {
+                    updateNotification("Hidden ${result.successCount} apps - System optimized")
+                }
+            }.start()
         }
 
         // Start state checking
@@ -289,7 +306,8 @@ class GpsTrackingService : Service() {
             gpsTracking = locationManager.isTracking(),
             batteryLevel = batteryInfo.level,
             isCharging = batteryInfo.isCharging,
-            isDeviceOwner = connectivityManager.isDeviceOwner()
+            isDeviceOwner = connectivityManager.isDeviceOwner(),
+            hiddenAppsCount = appHidingManager.getHiddenAppsCount()
         )
     }
 
@@ -301,7 +319,8 @@ class GpsTrackingService : Service() {
         val gpsTracking: Boolean,
         val batteryLevel: Int,
         val isCharging: Boolean,
-        val isDeviceOwner: Boolean
+        val isDeviceOwner: Boolean,
+        val hiddenAppsCount: Int
     )
 
     companion object {
