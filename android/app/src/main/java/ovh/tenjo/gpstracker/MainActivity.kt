@@ -43,6 +43,8 @@ class MainActivity : ComponentActivity() {
     private var stateInfo by mutableStateOf<GpsTrackingService.StateInfo?>(null)
     private var isDeviceOwner by mutableStateOf(false)
     var isIncomingCall by mutableStateOf(false)
+    var showCallMomConfirmation by mutableStateOf(false)
+    var showCallDadConfirmation by mutableStateOf(false)
 
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
@@ -317,16 +319,23 @@ fun DebugUI(stateInfo: GpsTrackingService.StateInfo?, context: Context) {
                 )
             ) {
                 Column(
-                    modifier = Modifier.padding(16.dp),
+                    modifier = Modifier.padding(24.dp),
                     horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally
                 ) {
                     Text(
                         text = "📞 INCOMING CALL",
-                        style = MaterialTheme.typography.headlineSmall,
+                        style = MaterialTheme.typography.headlineLarge,
                         color = Color.White
                     )
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "From Mom or Dad",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Color.White,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+
+                    Spacer(modifier = Modifier.height(20.dp))
 
                     Button(
                         onClick = {
@@ -335,16 +344,24 @@ fun DebugUI(stateInfo: GpsTrackingService.StateInfo?, context: Context) {
                         },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(64.dp),
+                            .height(80.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = Color.White
                         )
                     ) {
-                        Text(
-                            text = "ANSWER CALL",
-                            style = MaterialTheme.typography.titleLarge,
-                            color = Color(0xFF4CAF50)
-                        )
+                        Column(
+                            horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "📱",
+                                style = MaterialTheme.typography.displaySmall
+                            )
+                            Text(
+                                text = "ANSWER",
+                                style = MaterialTheme.typography.headlineMedium,
+                                color = Color(0xFF4CAF50)
+                            )
+                        }
                     }
                 }
             }
@@ -621,7 +638,7 @@ fun DebugUI(stateInfo: GpsTrackingService.StateInfo?, context: Context) {
                     Button(
                         onClick = {
                             val mainActivity = context as? MainActivity
-                            mainActivity?.callManager?.callMom()
+                            mainActivity?.showCallMomConfirmation = true
                         },
                         modifier = Modifier
                             .weight(1f)
@@ -647,7 +664,7 @@ fun DebugUI(stateInfo: GpsTrackingService.StateInfo?, context: Context) {
                     Button(
                         onClick = {
                             val mainActivity = context as? MainActivity
-                            mainActivity?.callManager?.callDad()
+                            mainActivity?.showCallDadConfirmation = true
                         },
                         modifier = Modifier
                             .weight(1f)
@@ -859,6 +876,150 @@ fun DebugUI(stateInfo: GpsTrackingService.StateInfo?, context: Context) {
                 )
             }
         }
+    }
+
+    // Confirmation Dialog for Call Mom
+    if (mainActivity?.showCallMomConfirmation == true) {
+        AlertDialog(
+            onDismissRequest = { mainActivity.showCallMomConfirmation = false },
+            title = {
+                Column(
+                    horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "📞",
+                        style = MaterialTheme.typography.displayLarge
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Call Mom?",
+                        style = MaterialTheme.typography.headlineMedium
+                    )
+                }
+            },
+            text = {
+                Column(
+                    horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "You are about to call:",
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = AppConfig.MOM_PHONE_NUMBER,
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        mainActivity?.callManager?.callMom()
+                        mainActivity?.showCallMomConfirmation = false
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF4CAF50)
+                    )
+                ) {
+                    Text(
+                        text = "YES, CALL MOM",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = { mainActivity?.showCallMomConfirmation = false },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp)
+                ) {
+                    Text(
+                        text = "Cancel",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
+            }
+        )
+    }
+
+    // Confirmation Dialog for Call Dad
+    if (mainActivity?.showCallDadConfirmation == true) {
+        AlertDialog(
+            onDismissRequest = { mainActivity.showCallDadConfirmation = false },
+            title = {
+                Column(
+                    horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "📞",
+                        style = MaterialTheme.typography.displayLarge
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Call Dad?",
+                        style = MaterialTheme.typography.headlineMedium
+                    )
+                }
+            },
+            text = {
+                Column(
+                    horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "You are about to call:",
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = AppConfig.DAD_PHONE_NUMBER,
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        mainActivity?.callManager?.callDad()
+                        mainActivity?.showCallDadConfirmation = false
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF4CAF50)
+                    )
+                ) {
+                    Text(
+                        text = "YES, CALL DAD",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = { mainActivity?.showCallDadConfirmation = false },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp)
+                ) {
+                    Text(
+                        text = "Cancel",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
+            }
+        )
     }
 }
 
