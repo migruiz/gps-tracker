@@ -118,21 +118,29 @@ class GpsTrackingService : Service() {
             connectivityManager.enableKioskMode()
             connectivityManager.restrictBackgroundData()
 
-            // Nuclear app removal - hide all non-critical apps to save CPU/battery
-            Log.i(TAG, "Device owner detected - initiating nuclear app removal")
-            updateNotification("Hiding non-critical apps...")
+            // Apply aggressive power restrictions to minimize CPU usage
+            connectivityManager.applyAggressivePowerRestrictions()
+
+            // AGGRESSIVE app removal - hide all non-critical apps to save CPU/battery
+            Log.i(TAG, "Device owner detected - initiating AGGRESSIVE app removal")
+            updateNotification("Stopping non-critical apps...")
 
             // Run in background thread to avoid blocking service startup
-            /*
             Thread {
-                val result = appHidingManager.hideNonCriticalApps()
-                Log.i(TAG, "App hiding completed: ${result.message}")
+                try {
+                    val result = appHidingManager.hideNonCriticalApps()
+                    Log.i(TAG, "AGGRESSIVE app hiding completed: ${result.message}")
 
-                handler.post {
-                    updateNotification("Hidden ${result.successCount} apps - System optimized")
+                    handler.post {
+                        updateNotification("Stopped ${result.successCount} apps - Maximum CPU optimization active")
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error during app hiding: ${e.message}", e)
+                    handler.post {
+                        updateNotification("App optimization error - continuing")
+                    }
                 }
             }.start()
-            */
 
         }
 

@@ -19,39 +19,97 @@ class AppHidingManager(private val context: Context) {
 
     /**
      * Critical system packages that should never be hidden
+     * OPTIMIZED FOR XIAOMI REDMI NOTE 2 - ANDROID 10
      */
     private val criticalPackages = setOf(
-        // Core Android system
+        // Core Android system (absolutely required)
         "android",
-        "com.android.phone",
         "com.android.systemui",
         "com.android.settings",
         "com.android.providers.settings",
 
-        // Core telephony and connectivity
+        // Phone/Telephony (for calls to 2 numbers)
+        "com.android.phone",
         "com.android.server.telecom",
-        "com.android.stk",
+        "com.android.providers.telephony",
         "com.android.cellbroadcastreceiver",
 
-        // Core providers
-        "com.android.providers.telephony",
+        // Location services (for GPS)
+        "com.android.location.fused",
+        "com.android.location",
+
+        // Minimal providers needed
         "com.android.providers.contacts",
-        "com.android.providers.calendar",
+        "com.android.providers.media",
+        "com.android.providers.downloads",
 
-        // Shell and debugging
+        // Shell (for debugging if needed)
         "com.android.shell",
-        "com.android.adb",
 
-        // Input methods (at least one should remain)
+        // Input method (keyboard) - at least one needed
         "com.android.inputmethod.latin",
         "com.google.android.inputmethod.latin",
 
-        // Package installer (needed for updates)
+        // Package installer (needed for system stability)
         "com.android.packageinstaller",
         "com.google.android.packageinstaller",
 
+        // XIAOMI CRITICAL SYSTEM APPS - DO NOT HIDE
+        "com.miui.home",                    // MIUI launcher - critical!
+        "com.miui.systemui",                // MIUI system UI
+        "com.android.incallui",             // Call UI
+        "com.miui.securitycenter",          // MIUI security (handles permissions)
+        "com.xiaomi.finddevice",            // Find device (system service)
+        "com.miui.powerkeeper",             // Power management (critical for battery)
+        "com.miui.notification",            // Notification system
+        "com.android.mms",                  // SMS/MMS (for emergency)
+        "com.android.contacts",             // Contacts (needed for calls)
+        "com.miui.core",                    // MIUI core services
+        "com.xiaomi.market",                // May be required by system
+        "com.miui.analytics",               // System analytics
+        "com.miui.daemon",                  // MIUI daemon
+        "com.xiaomi.xmsf",                  // Xiaomi message service framework
+
         // Our own app
         context.packageName
+    )
+
+    /**
+     * Additional system packages that are allowed to run
+     * These are Android core services that cannot be hidden but are essential
+     */
+    private val allowedSystemPrefixes = setOf(
+        "android.",
+        "com.android.location",
+        "com.android.server",
+        "com.qualcomm.",                    // Qualcomm system services (Xiaomi uses Qualcomm chips)
+        "com.qti.",                         // Qualcomm technologies
+        "org.codeaurora."                   // Code Aurora (Qualcomm)
+    )
+
+    /**
+     * Xiaomi bloatware that is SAFE to hide
+     * These are confirmed non-critical apps that won't break the system
+     */
+    private val xiaomiSafeToHide = setOf(
+        "com.xiaomi.gamecenter",
+        "com.xiaomi.glgm",
+        "com.xiaomi.payment",
+        "com.xiaomi.scanner",
+        "com.xiaomi.shop",
+        "com.mi.android.globalminusscreen",
+        "com.miui.gallery",
+        "com.miui.video",
+        "com.miui.player",
+        "com.miui.notes",
+        "com.miui.calculator",
+        "com.miui.weather2",
+        "com.miui.compass",
+        "com.miui.fm",
+        "com.android.browser",
+        "com.android.chrome",
+        "com.miui.bugreport",
+        "com.miui.yellowpage"
     )
 
     fun isDeviceOwner(): Boolean {
@@ -59,7 +117,8 @@ class AppHidingManager(private val context: Context) {
     }
 
     /**
-     * Hide all non-critical apps to minimize CPU usage and battery drain.
+     * AGGRESSIVELY hide all non-critical apps to minimize CPU usage and battery drain.
+     * This uses a whitelist approach - everything not explicitly needed is hidden.
      * Hidden apps cannot run, sync, or trigger alarms.
      */
     fun hideNonCriticalApps(): HideResult {
@@ -77,12 +136,12 @@ class AppHidingManager(private val context: Context) {
             @Suppress("DEPRECATION")
             val packages = context.packageManager.getInstalledApplications(0)
 
-            Log.d(TAG, "Found ${packages.size} installed packages")
+            Log.d(TAG, "Found ${packages.size} installed packages - using AGGRESSIVE hiding mode")
 
             for (appInfo in packages) {
                 val packageName = appInfo.packageName
 
-                // Skip critical packages
+                // Skip critical packages (whitelist approach)
                 if (isCriticalPackage(packageName, appInfo)) {
                     Log.d(TAG, "Skipping critical package: $packageName")
                     continue
@@ -102,6 +161,20 @@ class AppHidingManager(private val context: Context) {
                         if (success) {
                             hiddenCount++
                             Log.d(TAG, "Hidden app: $packageName")
+
+                            // Also suspend the package to ensure it can't run (API 24+)
+                            try {
+                                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+                                    devicePolicyManager.setPackagesSuspended(
+                                        adminComponent,
+                                        arrayOf(packageName),
+                                        true
+                                    )
+                                }
+                            } catch (e: Exception) {
+                                // Some packages cannot be suspended
+                                Log.d(TAG, "Could not suspend $packageName: ${e.message}")
+                            }
                         } else {
                             failedCount++
                             Log.w(TAG, "Failed to hide app: $packageName")
@@ -116,7 +189,7 @@ class AppHidingManager(private val context: Context) {
             }
 
             val duration = System.currentTimeMillis() - startTime
-            val message = "Hidden $hiddenCount apps, failed $failedCount, took ${duration}ms"
+            val message = "AGGRESSIVE MODE: Hidden $hiddenCount apps, failed $failedCount, took ${duration}ms"
             Log.i(TAG, message)
 
             return HideResult(hiddenCount, failedCount, message)
@@ -183,37 +256,72 @@ class AppHidingManager(private val context: Context) {
 
     /**
      * Check if a package is critical and should not be hidden
+     * XIAOMI-SAFE APPROACH - protects critical MIUI system components
      */
     private fun isCriticalPackage(packageName: String, appInfo: ApplicationInfo): Boolean {
-        // Check if in critical list
+        // Check if in critical whitelist
         if (criticalPackages.contains(packageName)) {
             return true
         }
 
-        // Check if package starts with critical prefixes
-        if (packageName.startsWith("android.") ||
-            packageName.startsWith("com.android.") &&
-            (packageName.contains("system") ||
-             packageName.contains("phone") ||
-             packageName.contains("bluetooth") ||
-             packageName.contains("nfc") ||
-             packageName.contains("server"))) {
-            return true
-        }
-
-        // Keep system apps that are part of the core system
-        if ((appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0) {
-            // System app - be more selective
-            // Allow hiding of pre-installed bloatware but keep critical system services
-            if (packageName.startsWith("com.google.") ||
-                packageName.startsWith("com.samsung.") ||
-                packageName.startsWith("com.huawei.") ||
-                packageName.startsWith("com.xiaomi.")) {
-                // These are typically bloatware, can be hidden
-                return false
+        // Check if package starts with critical prefixes (very limited set)
+        for (prefix in allowedSystemPrefixes) {
+            if (packageName.startsWith(prefix)) {
+                return true
             }
         }
 
+        // Special check for Android system processes (cannot be hidden)
+        if (packageName.startsWith("com.android.") &&
+            (packageName.contains("systemui") ||
+             packageName.contains("phone") ||
+             packageName.contains("telecom") ||
+             packageName.contains("incallui") ||
+             packageName.contains("mms") ||
+             packageName.contains("contacts"))) {
+            return true
+        }
+
+        // XIAOMI-SPECIFIC: Keep critical MIUI system components
+        if (packageName.startsWith("com.miui.") || packageName.startsWith("com.xiaomi.")) {
+            // Check if it's safe to hide
+            if (xiaomiSafeToHide.contains(packageName)) {
+                Log.d(TAG, "HIDING safe Xiaomi bloatware: $packageName")
+                return false
+            }
+
+            // Keep all other MIUI/Xiaomi system apps to prevent instability
+            Log.d(TAG, "KEEPING Xiaomi system app (safety): $packageName")
+            return true
+        }
+
+        // AGGRESSIVE: Hide ALL Google services (Play Services, Play Store, etc)
+        // They try to sync and use CPU constantly
+        if (packageName.startsWith("com.google.")) {
+            Log.d(TAG, "HIDING Google service: $packageName")
+            return false
+        }
+
+        // AGGRESSIVE: Hide other manufacturer bloatware (not Xiaomi)
+        if (packageName.startsWith("com.samsung.") ||
+            packageName.startsWith("com.huawei.") ||
+            packageName.startsWith("com.oppo.") ||
+            packageName.startsWith("com.vivo.") ||
+            packageName.startsWith("com.oneplus.")) {
+            Log.d(TAG, "HIDING other manufacturer bloatware: $packageName")
+            return false
+        }
+
+        // CONSERVATIVE: For system apps not in whitelist, be cautious
+        if ((appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0) {
+            // It's a system app - hide only if we're sure it's safe
+            // Keep most system apps to prevent instability on Xiaomi
+            Log.d(TAG, "KEEPING system app (conservative): $packageName")
+            return true
+        }
+
+        // AGGRESSIVE: Hide ALL user-installed apps (they're not in our whitelist)
+        Log.d(TAG, "HIDING user-installed app: $packageName")
         return false
     }
 
@@ -256,4 +364,3 @@ class AppHidingManager(private val context: Context) {
         private const val TAG = "AppHidingManager"
     }
 }
-

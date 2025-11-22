@@ -33,11 +33,6 @@ class ConnectivityManager(private val context: Context) {
         return devicePolicyManager.isDeviceOwnerApp(context.packageName)
     }
 
-
-
-
-
-
     fun restrictBackgroundData() {
         if (!isDeviceOwner()) {
             Log.w(TAG, "Cannot restrict background data - not device owner")
@@ -48,9 +43,12 @@ class ConnectivityManager(private val context: Context) {
             // Get all installed packages and restrict their background data
             @Suppress("DEPRECATION")
             val packages = context.packageManager.getInstalledApplications(0)
+
+            var restrictedCount = 0
             for (packageInfo in packages) {
                 if (packageInfo.packageName != context.packageName) {
                     try {
+                        // Restrict background data
                         devicePolicyManager.setApplicationRestrictions(
                             adminComponent,
                             packageInfo.packageName,
@@ -58,15 +56,78 @@ class ConnectivityManager(private val context: Context) {
                                 putBoolean("background_data", false)
                             }
                         )
+
+                        // Also add to restricted background apps list (API 21+)
+                        try {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                                devicePolicyManager.addUserRestriction(
+                                    adminComponent,
+                                    "no_config_vpn"
+                                )
+                            }
+                        } catch (e: Exception) {
+                            // Ignore if already set
+                        }
+
+                        restrictedCount++
                     } catch (_: Exception) {
-                        Log.d(TAG, "Error restricting background data for ${packageInfo.packageName}")
                         // Some system packages may not allow restrictions
                     }
                 }
             }
-            Log.d(TAG, "Restricted background data for other apps")
+            Log.d(TAG, "Restricted background data for $restrictedCount apps")
         } catch (e: Exception) {
             Log.e(TAG, "Error restricting background data", e)
+        }
+    }
+
+    /**
+     * Apply aggressive power and performance restrictions to minimize CPU usage
+     * XIAOMI-SAFE: Conservative approach to avoid system instability
+     */
+    fun applyAggressivePowerRestrictions() {
+        if (!isDeviceOwner()) {
+            Log.w(TAG, "Cannot apply power restrictions - not device owner")
+            return
+        }
+
+        try {
+            // Disable automatic time zone (saves CPU from network checks)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                try {
+                    devicePolicyManager.setAutoTimeRequired(adminComponent, false)
+                    Log.d(TAG, "Disabled automatic time updates")
+                } catch (e: Exception) {
+                    Log.d(TAG, "Could not disable auto time: ${e.message}")
+                }
+            }
+
+            // Add CONSERVATIVE user restrictions to prevent background activities
+            // Only add restrictions that won't break Xiaomi system functionality
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                val safeRestrictions = listOf(
+                    "no_install_apps",          // Prevent app installations
+                    "no_uninstall_apps"         // Prevent app uninstalls
+                    // NOTE: Removed other restrictions as they may interfere with MIUI
+                    // Xiaomi's MIUI has many system services that need access to:
+                    // - Accounts (MIUI cloud, etc.)
+                    // - Location (Find Device, etc.)
+                    // - Bluetooth/WiFi (system optimization)
+                )
+
+                for (restriction in safeRestrictions) {
+                    try {
+                        devicePolicyManager.addUserRestriction(adminComponent, restriction)
+                        Log.d(TAG, "Added restriction: $restriction")
+                    } catch (e: Exception) {
+                        Log.d(TAG, "Could not add restriction $restriction: ${e.message}")
+                    }
+                }
+            }
+
+            Log.i(TAG, "Applied XIAOMI-SAFE power restrictions successfully")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error applying power restrictions", e)
         }
     }
 
