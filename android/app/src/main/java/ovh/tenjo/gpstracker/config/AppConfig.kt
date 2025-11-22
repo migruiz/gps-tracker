@@ -19,6 +19,11 @@ object AppConfig {
     const val BATTERY_CHECK_INTERVAL_MS = 3600000L // 1 hour
     const val BATTERY_LOW_THRESHOLD = 30 // 20% battery level
 
+    // Phone Configuration - Whitelisted contacts
+    // TODO: Replace these with actual phone numbers before deployment
+    const val MOM_PHONE_NUMBER = "+353894108085"
+    const val DAD_PHONE_NUMBER = "+353894195242"
+
     // Awake Time Slots (hardcoded schedule)
     val AWAKE_TIME_SLOTS = listOf(
         TimeSlot(8, 0, 11, 0),     // 08:00 -> 09:00

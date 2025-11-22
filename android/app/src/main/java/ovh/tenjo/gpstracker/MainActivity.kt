@@ -27,6 +27,8 @@ import ovh.tenjo.gpstracker.model.AppState
 import ovh.tenjo.gpstracker.service.GpsTrackingService
 import ovh.tenjo.gpstracker.ui.theme.GPSTrackerTheme
 import ovh.tenjo.gpstracker.location.SinkholeVpnService
+import ovh.tenjo.gpstracker.utils.VolumeControlManager
+import ovh.tenjo.gpstracker.utils.CallManager
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -35,7 +37,11 @@ class MainActivity : ComponentActivity() {
     private var trackingService: GpsTrackingService? = null
     private var serviceBound = false
 
+    private lateinit var volumeControlManager: VolumeControlManager
+    lateinit var callManager: CallManager
+
     private var stateInfo by mutableStateOf<GpsTrackingService.StateInfo?>(null)
+    private var isDeviceOwner by mutableStateOf(false)
 
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
@@ -83,6 +89,21 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Initialize managers
+        volumeControlManager = VolumeControlManager(this)
+        callManager = CallManager(this)
+
+        // Check if device owner and apply volume controls
+        val devicePolicyManager = getSystemService(Context.DEVICE_POLICY_SERVICE) as android.app.admin.DevicePolicyManager
+        isDeviceOwner = devicePolicyManager.isDeviceOwnerApp(packageName)
+
+        if (isDeviceOwner) {
+            // Mute all volumes and disable volume buttons in DO mode
+            volumeControlManager.muteAllVolumes()
+            volumeControlManager.disableVolumeButtons()
+            Log.d(TAG, "Device Owner mode: Volumes muted and buttons disabled")
+        }
 
         // Request permissions
         checkAndRequestPermissions()
@@ -147,7 +168,10 @@ class MainActivity : ComponentActivity() {
             Manifest.permission.ACCESS_NETWORK_STATE,
             Manifest.permission.CHANGE_NETWORK_STATE,
             Manifest.permission.ACCESS_WIFI_STATE,
-            Manifest.permission.CHANGE_WIFI_STATE
+            Manifest.permission.CHANGE_WIFI_STATE,
+            Manifest.permission.READ_PHONE_STATE,
+            Manifest.permission.CALL_PHONE,
+            Manifest.permission.READ_CALL_LOG
         )
 
         // Add background location for Android 10+
@@ -158,6 +182,11 @@ class MainActivity : ComponentActivity() {
         // Add foreground service location for Android 14+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             permissions.add(Manifest.permission.FOREGROUND_SERVICE_LOCATION)
+        }
+
+        // Add ANSWER_PHONE_CALLS for Android 8.0+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            permissions.add(Manifest.permission.ANSWER_PHONE_CALLS)
         }
 
         val permissionsToRequest = permissions.filter {
@@ -485,6 +514,95 @@ fun DebugUI(stateInfo: GpsTrackingService.StateInfo?, context: Context) {
                         color = Color.Gray
                     )
                 }
+            }
+        }
+
+        // Emergency Call Card - Call Mom or Dad
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.primaryContainer
+            )
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "Emergency Calls",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+
+                Text(
+                    text = "Only calls from Mom or Dad are allowed",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Button(
+                        onClick = {
+                            val mainActivity = context as? MainActivity
+                            mainActivity?.callManager?.callMom()
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(56.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary
+                        )
+                    ) {
+                        Column(
+                            horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "📞",
+                                style = MaterialTheme.typography.titleLarge
+                            )
+                            Text(
+                                text = "Call Mom",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                    }
+
+                    Button(
+                        onClick = {
+                            val mainActivity = context as? MainActivity
+                            mainActivity?.callManager?.callDad()
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(56.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary
+                        )
+                    ) {
+                        Column(
+                            horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "📞",
+                                style = MaterialTheme.typography.titleLarge
+                            )
+                            Text(
+                                text = "Call Dad",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                    }
+                }
+
+                Text(
+                    text = "Mom: ${AppConfig.MOM_PHONE_NUMBER}\nDad: ${AppConfig.DAD_PHONE_NUMBER}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.padding(top = 12.dp)
+                )
             }
         }
 
