@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.ActivityManager
 import android.content.*
 import android.content.pm.PackageManager
+import android.net.VpnService
 import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
@@ -64,6 +65,18 @@ class MainActivity : ComponentActivity() {
             startTrackingService()
         } else {
             Log.e(TAG, "Some permissions not granted")
+        }
+    }
+
+    private val vpnPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == RESULT_OK) {
+            // VPN permission granted, start the service
+            startVpnServiceInternal()
+        } else {
+            // Permission not granted, show a message to the user
+            Log.e(TAG, "VPN permission not granted")
         }
     }
 
@@ -185,6 +198,20 @@ class MainActivity : ComponentActivity() {
     }
 
     public fun startSinkholeVpn() {
+        // Check if VPN permission is already granted
+        val prepareIntent = VpnService.prepare(this)
+        if (prepareIntent != null) {
+            // Need to request VPN permission
+            Log.d(TAG, "Requesting VPN permission")
+            vpnPermissionLauncher.launch(prepareIntent)
+        } else {
+            // Permission already granted, start VPN directly
+            Log.d(TAG, "VPN permission already granted")
+            startVpnServiceInternal()
+        }
+    }
+
+    private fun startVpnServiceInternal() {
         val intent = Intent(this, SinkholeVpnService::class.java)
         try {
             ContextCompat.startForegroundService(this, intent)
@@ -199,6 +226,7 @@ class MainActivity : ComponentActivity() {
         stopService(intent)
         Log.d(TAG, "Stopped Sinkhole VPN service")
     }
+
 
     companion object {
         private const val TAG = "MainActivity"

@@ -9,10 +9,13 @@ import android.content.pm.PackageManager
 import android.net.VpnService
 import android.os.Build
 import android.os.IBinder
+import android.os.ParcelFileDescriptor
 import android.util.Log
 import androidx.core.app.NotificationCompat
 
 class SinkholeVpnService : VpnService() {
+
+    private var vpnInterface: ParcelFileDescriptor? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -31,18 +34,55 @@ class SinkholeVpnService : VpnService() {
 
         startForeground(NOTIFICATION_ID, notification)
 
-        val builder = Builder()
-        builder.addAddress("192.168.0.1", 24)
-        builder.addRoute("0.0.0.0", 0) // Intercept all traffic
+        // Build and establish the VPN
         try {
-            builder.addDisallowedApplication(packageName) // Let this app bypass VPN
-        } catch (e: PackageManager.NameNotFoundException) {
-            Log.e(TAG, "Failed to disallow app from VPN", e)
+            val builder = Builder()
+            builder.addAddress("10.0.0.2", 32)
+            builder.addRoute("0.0.0.0", 0) // Intercept all traffic
+
+            // CRITICAL: Bypass this app so it can still use the internet
+            try {
+                builder.addDisallowedApplication(packageName)
+                Log.d(TAG, "Bypassed app: $packageName")
+            } catch (e: PackageManager.NameNotFoundException) {
+                Log.e(TAG, "Failed to disallow app from VPN", e)
+            }
+
+            builder.setSession("SinkholeVPN")
+            builder.setBlocking(false)
+
+            // Establish the VPN interface - MUST keep reference
+            vpnInterface = builder.establish()
+
+            if (vpnInterface != null) {
+                Log.i(TAG, "Sinkhole VPN established successfully - all other apps blocked")
+            } else {
+                Log.e(TAG, "Failed to establish VPN interface")
+                stopSelf()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error establishing VPN", e)
+            stopSelf()
         }
-        builder.setSession("SinkholeVPN")
-        builder.establish() // Do not process packets, just blackhole
-        Log.i(TAG, "Sinkhole VPN established")
+
         return Service.START_STICKY
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        try {
+            vpnInterface?.close()
+            vpnInterface = null
+            Log.i(TAG, "VPN interface closed")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error closing VPN interface", e)
+        }
+    }
+
+    override fun onRevoke() {
+        super.onRevoke()
+        Log.w(TAG, "VPN permission revoked")
+        stopSelf()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
