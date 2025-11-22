@@ -81,7 +81,7 @@ class LocationManager(private val context: Context) {
             )
 
             // Also try network provider as backup
-            /*
+
             if (locationManager.isProviderEnabled(AndroidLocationManager.NETWORK_PROVIDER)) {
                 locationManager.requestLocationUpdates(
                     AndroidLocationManager.NETWORK_PROVIDER,
@@ -90,7 +90,7 @@ class LocationManager(private val context: Context) {
                     locationListener!!
                 )
             }
-             */
+
 
             isTracking = true
             Log.d(TAG, "Started location updates")
