@@ -164,6 +164,32 @@ export default function Map() {
       },
       zIndex: 1000,
     });
+
+    // Create info window for current location
+    const now = Date.now();
+    const timeDiff = now - currentLocation.timestamp;
+    const timeAgo = formatTimeAgo(timeDiff);
+    const timestamp = new Date(currentLocation.timestamp).toLocaleString();
+
+    const currentInfoWindow = new google.maps.InfoWindow({
+      content: `
+        <div style="padding: 8px;">
+          <strong>Current Position</strong><br>
+          <strong>Time:</strong> ${timestamp}<br>
+          <strong>Ago:</strong> ${timeAgo}<br>
+          <strong>Accuracy:</strong> ${currentLocation.accuracy.toFixed(1)}m
+        </div>
+      `,
+    });
+
+    currentDotMarker.addListener('mouseover', () => {
+      currentInfoWindow.open(map, currentDotMarker);
+    });
+
+    currentDotMarker.addListener('mouseout', () => {
+      currentInfoWindow.close();
+    });
+
     markersRef.current.push(currentDotMarker);
 
     // Create path with blue lines
