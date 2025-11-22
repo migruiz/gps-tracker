@@ -21,6 +21,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import ovh.tenjo.gpstracker.config.AppConfig
 import ovh.tenjo.gpstracker.model.AppState
@@ -45,6 +46,8 @@ class MainActivity : ComponentActivity() {
     var isIncomingCall by mutableStateOf(false)
     var showCallMomConfirmation by mutableStateOf(false)
     var showCallDadConfirmation by mutableStateOf(false)
+    var isInCall by mutableStateOf(false)
+    var currentCallWith by mutableStateOf<String?>(null) // "Mom" or "Dad"
 
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
@@ -302,68 +305,236 @@ fun DebugUI(stateInfo: GpsTrackingService.StateInfo?, context: Context) {
     val scrollState = rememberScrollState()
     val mainActivity = context as? MainActivity
 
+    // Full-screen incoming call dialog
+    if (mainActivity?.isIncomingCall == true) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color(0xFF4CAF50)),
+            contentAlignment = androidx.compose.ui.Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+                modifier = Modifier.padding(32.dp)
+            ) {
+                Text(
+                    text = "📞",
+                    style = MaterialTheme.typography.displayLarge,
+                    fontSize = 100.dp.value.sp
+                )
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                Text(
+                    text = "INCOMING CALL",
+                    style = MaterialTheme.typography.displayLarge,
+                    color = Color.White
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Text(
+                    text = "From Mom or Dad",
+                    style = MaterialTheme.typography.headlineLarge,
+                    color = Color.White
+                )
+
+                Spacer(modifier = Modifier.height(48.dp))
+
+                Button(
+                    onClick = {
+                        mainActivity.callManager.acceptCall()
+                        mainActivity.isIncomingCall = false
+                        mainActivity.isInCall = true
+                        mainActivity.currentCallWith = "Mom/Dad"
+                        Log.d("DebugUI", "Answer button pressed")
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(100.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.White
+                    )
+                ) {
+                    Column(
+                        horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "📱",
+                            style = MaterialTheme.typography.displayMedium
+                        )
+                        Text(
+                            text = "ANSWER",
+                            style = MaterialTheme.typography.displaySmall,
+                            color = Color(0xFF4CAF50)
+                        )
+                    }
+                }
+            }
+        }
+        return // Don't show main UI when incoming call
+    }
+
+    // In-call dialog overlay
+    if (mainActivity?.isInCall == true) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color(0xFF2196F3)),
+            contentAlignment = androidx.compose.ui.Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+                modifier = Modifier.padding(32.dp)
+            ) {
+                Text(
+                    text = "☎️",
+                    style = MaterialTheme.typography.displayLarge,
+                    fontSize = 100.dp.value.sp
+                )
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                Text(
+                    text = "IN CALL",
+                    style = MaterialTheme.typography.displayLarge,
+                    color = Color.White
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Text(
+                    text = "Connected with ${mainActivity.currentCallWith ?: "Mom/Dad"}",
+                    style = MaterialTheme.typography.headlineLarge,
+                    color = Color.White
+                )
+
+                Spacer(modifier = Modifier.height(48.dp))
+
+                Button(
+                    onClick = {
+                        mainActivity.isInCall = false
+                        mainActivity.currentCallWith = null
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(80.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFE53935) // Red for end call
+                    )
+                ) {
+                    Column(
+                        horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "📴",
+                            style = MaterialTheme.typography.displayMedium,
+                            color = Color.White
+                        )
+                        Text(
+                            text = "END CALL",
+                            style = MaterialTheme.typography.headlineMedium,
+                            color = Color.White
+                        )
+                    }
+                }
+            }
+        }
+        return // Don't show main UI when in call
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(scrollState)
             .padding(16.dp)
     ) {
-        // INCOMING CALL ANSWER BUTTON - Shows at top when call is ringing
-        if (mainActivity?.isIncomingCall == true) {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 8.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = Color(0xFF4CAF50) // Green for answer
+        // Emergency Call Card at the TOP - Call Mom or Dad
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.primaryContainer
+            )
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "Emergency Calls",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
                 )
-            ) {
-                Column(
-                    modifier = Modifier.padding(24.dp),
-                    horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally
+
+                Text(
+                    text = "Only calls from Mom or Dad are allowed",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text(
-                        text = "📞 INCOMING CALL",
-                        style = MaterialTheme.typography.headlineLarge,
-                        color = Color.White
-                    )
-
-                    Text(
-                        text = "From Mom or Dad",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = Color.White,
-                        modifier = Modifier.padding(top = 4.dp)
-                    )
-
-                    Spacer(modifier = Modifier.height(20.dp))
-
                     Button(
                         onClick = {
-                            mainActivity.callManager.acceptCall()
-                            Log.d("DebugUI", "Answer button pressed")
+                            mainActivity?.showCallMomConfirmation = true
                         },
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .height(80.dp),
+                            .weight(1f)
+                            .height(64.dp),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = Color.White
+                            containerColor = MaterialTheme.colorScheme.primary
                         )
                     ) {
                         Column(
                             horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally
                         ) {
                             Text(
-                                text = "📱",
-                                style = MaterialTheme.typography.displaySmall
+                                text = "📞",
+                                style = MaterialTheme.typography.headlineMedium
                             )
                             Text(
-                                text = "ANSWER",
-                                style = MaterialTheme.typography.headlineMedium,
-                                color = Color(0xFF4CAF50)
+                                text = "Call Mom",
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                        }
+                    }
+
+                    Button(
+                        onClick = {
+                            mainActivity?.showCallDadConfirmation = true
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(64.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary
+                        )
+                    ) {
+                        Column(
+                            horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "📞",
+                                style = MaterialTheme.typography.headlineMedium
+                            )
+                            Text(
+                                text = "Call Dad",
+                                style = MaterialTheme.typography.titleMedium
                             )
                         }
                     }
                 }
+
+                Text(
+                    text = "Mom: ${AppConfig.MOM_PHONE_NUMBER}\nDad: ${AppConfig.DAD_PHONE_NUMBER}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.padding(top = 12.dp)
+                )
             }
         }
 
@@ -608,94 +779,6 @@ fun DebugUI(stateInfo: GpsTrackingService.StateInfo?, context: Context) {
             }
         }
 
-        // Emergency Call Card - Call Mom or Dad
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 8.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.primaryContainer
-            )
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    text = "Emergency Calls",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-
-                Text(
-                    text = "Only calls from Mom or Dad are allowed",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                    modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Button(
-                        onClick = {
-                            val mainActivity = context as? MainActivity
-                            mainActivity?.showCallMomConfirmation = true
-                        },
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(56.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary
-                        )
-                    ) {
-                        Column(
-                            horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally
-                        ) {
-                            Text(
-                                text = "📞",
-                                style = MaterialTheme.typography.titleLarge
-                            )
-                            Text(
-                                text = "Call Mom",
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                        }
-                    }
-
-                    Button(
-                        onClick = {
-                            val mainActivity = context as? MainActivity
-                            mainActivity?.showCallDadConfirmation = true
-                        },
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(56.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary
-                        )
-                    ) {
-                        Column(
-                            horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally
-                        ) {
-                            Text(
-                                text = "📞",
-                                style = MaterialTheme.typography.titleLarge
-                            )
-                            Text(
-                                text = "Call Dad",
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                        }
-                    }
-                }
-
-                Text(
-                    text = "Mom: ${AppConfig.MOM_PHONE_NUMBER}\nDad: ${AppConfig.DAD_PHONE_NUMBER}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                    modifier = Modifier.padding(top = 12.dp)
-                )
-            }
-        }
 
         // Battery Info
         Card(
@@ -920,6 +1003,9 @@ fun DebugUI(stateInfo: GpsTrackingService.StateInfo?, context: Context) {
                     onClick = {
                         mainActivity?.callManager?.callMom()
                         mainActivity?.showCallMomConfirmation = false
+                        // Show in-call dialog
+                        mainActivity?.isInCall = true
+                        mainActivity?.currentCallWith = "Mom"
                     },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -992,6 +1078,9 @@ fun DebugUI(stateInfo: GpsTrackingService.StateInfo?, context: Context) {
                     onClick = {
                         mainActivity?.callManager?.callDad()
                         mainActivity?.showCallDadConfirmation = false
+                        // Show in-call dialog
+                        mainActivity?.isInCall = true
+                        mainActivity?.currentCallWith = "Dad"
                     },
                     modifier = Modifier
                         .fillMaxWidth()

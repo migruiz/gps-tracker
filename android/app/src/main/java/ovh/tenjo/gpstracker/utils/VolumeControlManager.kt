@@ -4,6 +4,9 @@ import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.content.Context
 import android.media.AudioManager
+import android.media.Ringtone
+import android.media.RingtoneManager
+import android.net.Uri
 import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
@@ -22,6 +25,7 @@ class VolumeControlManager(private val context: Context) {
     private var originalVolumes = mutableMapOf<Int, Int>()
     private var isVolumeMuted = false
     private var wakeLock: PowerManager.WakeLock? = null
+    private var ringtone: Ringtone? = null
 
     /**
      * Mute all volumes (notifications, sounds, media, ringer) when in DO mode
@@ -85,6 +89,9 @@ class VolumeControlManager(private val context: Context) {
             audioManager.setStreamVolume(AudioManager.STREAM_RING, maxVolume, AudioManager.FLAG_SHOW_UI)
             audioManager.ringerMode = AudioManager.RINGER_MODE_NORMAL
 
+            // Play default ringtone
+            playRingtone()
+
             // Enable vibration
             startVibration()
 
@@ -94,6 +101,44 @@ class VolumeControlManager(private val context: Context) {
             Log.d(TAG, "Ringer, vibration, and screen enabled for incoming call")
         } catch (e: Exception) {
             Log.e(TAG, "Error enabling ringer", e)
+        }
+    }
+
+    /**
+     * Play the default ringtone
+     */
+    private fun playRingtone() {
+        try {
+            // Stop any existing ringtone
+            stopRingtone()
+
+            // Get default ringtone URI
+            val ringtoneUri: Uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+
+            // Create and play ringtone
+            ringtone = RingtoneManager.getRingtone(context, ringtoneUri)
+            ringtone?.play()
+
+            Log.d(TAG, "Ringtone started")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error playing ringtone", e)
+        }
+    }
+
+    /**
+     * Stop the ringtone
+     */
+    private fun stopRingtone() {
+        try {
+            ringtone?.let {
+                if (it.isPlaying) {
+                    it.stop()
+                }
+            }
+            ringtone = null
+            Log.d(TAG, "Ringtone stopped")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error stopping ringtone", e)
         }
     }
 
@@ -170,22 +215,43 @@ class VolumeControlManager(private val context: Context) {
     }
 
     /**
-     * Disable ringer after call
+     * Disable ringer after call and stop vibration/ringtone
      */
     fun disableRingerAfterCall() {
         try {
-            audioManager.setStreamVolume(AudioManager.STREAM_RING, 0, 0)
-            audioManager.ringerMode = AudioManager.RINGER_MODE_SILENT
+            // Stop ringtone
+            stopRingtone()
 
             // Stop vibration
             stopVibration()
 
+            // Mute volume
+            audioManager.setStreamVolume(AudioManager.STREAM_RING, 0, 0)
+            audioManager.ringerMode = AudioManager.RINGER_MODE_SILENT
+
             // Release wake lock
             releaseWakeLock()
 
-            Log.d(TAG, "Ringer, vibration disabled and screen released after call")
+            Log.d(TAG, "Ringer, ringtone, vibration disabled and screen released after call")
         } catch (e: Exception) {
             Log.e(TAG, "Error disabling ringer", e)
+        }
+    }
+
+    /**
+     * Stop ringing and vibration when call is answered
+     */
+    fun onCallAnswered() {
+        try {
+            // Stop ringtone
+            stopRingtone()
+
+            // Stop vibration
+            stopVibration()
+
+            Log.d(TAG, "Ringtone and vibration stopped - call answered")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error on call answered", e)
         }
     }
 

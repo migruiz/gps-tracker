@@ -124,8 +124,8 @@ class PhoneCallReceiver : BroadcastReceiver() {
 
     private fun onCallAnswered(context: Context, volumeManager: VolumeControlManager) {
         Log.d(TAG, "Call answered")
-        // Keep ringer enabled during call if it's from whitelist
-        // The volume will be restored after call ends
+        // Stop ringing and vibration when call is answered
+        volumeManager.onCallAnswered()
     }
 
     private fun onCallEnded(context: Context, volumeManager: VolumeControlManager) {
