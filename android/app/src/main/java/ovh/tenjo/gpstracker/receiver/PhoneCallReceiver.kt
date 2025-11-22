@@ -62,23 +62,32 @@ class PhoneCallReceiver : BroadcastReceiver() {
                     } else {
                         onIncomingCall(context, incomingNumber, callManager, volumeManager)
                     }
+                    lastState = TelephonyManager.CALL_STATE_RINGING
                 }
                 TelephonyManager.EXTRA_STATE_OFFHOOK -> {
                     // Call answered or outgoing call
-                    broadcastCallEnded(context)
-                    onCallAnswered(context, volumeManager)
+                    Log.d(TAG, "Call state: OFFHOOK (answered/outgoing)")
+
+                    // Only stop ringtone/vibration if this was an incoming call from whitelist
+                    if (lastState == TelephonyManager.CALL_STATE_RINGING && isIncomingCallFromWhitelist) {
+                        Log.d(TAG, "Whitelisted call answered - stopping ringtone and vibration")
+                        onCallAnswered(context, volumeManager)
+                    }
+
+                    lastState = TelephonyManager.CALL_STATE_OFFHOOK
                 }
                 TelephonyManager.EXTRA_STATE_IDLE -> {
                     // Call ended
+                    Log.d(TAG, "Call state: IDLE (ended)")
                     broadcastCallEnded(context)
-                    onCallEnded(context, volumeManager)
-                }
-            }
 
-            lastState = when (state) {
-                TelephonyManager.EXTRA_STATE_RINGING -> TelephonyManager.CALL_STATE_RINGING
-                TelephonyManager.EXTRA_STATE_OFFHOOK -> TelephonyManager.CALL_STATE_OFFHOOK
-                else -> TelephonyManager.CALL_STATE_IDLE
+                    // Only restore muted state if this was a whitelisted call
+                    if (isIncomingCallFromWhitelist) {
+                        onCallEnded(context, volumeManager)
+                    }
+
+                    lastState = TelephonyManager.CALL_STATE_IDLE
+                }
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error handling phone call", e)
