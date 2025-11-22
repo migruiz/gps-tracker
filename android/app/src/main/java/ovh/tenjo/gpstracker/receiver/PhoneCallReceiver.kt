@@ -15,6 +15,9 @@ class PhoneCallReceiver : BroadcastReceiver() {
         private const val TAG = "PhoneCallReceiver"
         private var lastState = TelephonyManager.CALL_STATE_IDLE
         private var isIncomingCallFromWhitelist = false
+
+        const val ACTION_INCOMING_CALL = "ovh.tenjo.gpstracker.INCOMING_CALL"
+        const val ACTION_CALL_ENDED = "ovh.tenjo.gpstracker.CALL_ENDED"
     }
 
     override fun onReceive(context: Context?, intent: Intent?) {
@@ -47,7 +50,9 @@ class PhoneCallReceiver : BroadcastReceiver() {
 
             when (state) {
                 TelephonyManager.EXTRA_STATE_RINGING -> {
-                    // Incoming call
+                    // Incoming call - notify MainActivity
+                    broadcastIncomingCall(context)
+
                     if (incomingNumber.isNullOrBlank()) {
                         // If we can't get the number, for safety we should allow the call
                         // in case it's from Mom or Dad (better safe than sorry)
@@ -60,10 +65,12 @@ class PhoneCallReceiver : BroadcastReceiver() {
                 }
                 TelephonyManager.EXTRA_STATE_OFFHOOK -> {
                     // Call answered or outgoing call
+                    broadcastCallEnded(context)
                     onCallAnswered(context, volumeManager)
                 }
                 TelephonyManager.EXTRA_STATE_IDLE -> {
                     // Call ended
+                    broadcastCallEnded(context)
                     onCallEnded(context, volumeManager)
                 }
             }
@@ -76,6 +83,18 @@ class PhoneCallReceiver : BroadcastReceiver() {
         } catch (e: Exception) {
             Log.e(TAG, "Error handling phone call", e)
         }
+    }
+
+    private fun broadcastIncomingCall(context: Context) {
+        val intent = Intent(ACTION_INCOMING_CALL)
+        context.sendBroadcast(intent)
+        Log.d(TAG, "Broadcast: Incoming call")
+    }
+
+    private fun broadcastCallEnded(context: Context) {
+        val intent = Intent(ACTION_CALL_ENDED)
+        context.sendBroadcast(intent)
+        Log.d(TAG, "Broadcast: Call ended")
     }
 
     private fun onIncomingCall(

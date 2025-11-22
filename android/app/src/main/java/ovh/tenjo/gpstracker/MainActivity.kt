@@ -42,6 +42,7 @@ class MainActivity : ComponentActivity() {
 
     private var stateInfo by mutableStateOf<GpsTrackingService.StateInfo?>(null)
     private var isDeviceOwner by mutableStateOf(false)
+    var isIncomingCall by mutableStateOf(false)
 
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
@@ -60,6 +61,21 @@ class MainActivity : ComponentActivity() {
     private val stateUpdateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             updateStateInfo()
+        }
+    }
+
+    private val callStateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            when (intent?.action) {
+                ovh.tenjo.gpstracker.receiver.PhoneCallReceiver.ACTION_INCOMING_CALL -> {
+                    isIncomingCall = true
+                    Log.d(TAG, "UI: Incoming call detected - showing answer button")
+                }
+                ovh.tenjo.gpstracker.receiver.PhoneCallReceiver.ACTION_CALL_ENDED -> {
+                    isIncomingCall = false
+                    Log.d(TAG, "UI: Call ended - hiding answer button")
+                }
+            }
         }
     }
 
@@ -117,6 +133,18 @@ class MainActivity : ComponentActivity() {
             registerReceiver(stateUpdateReceiver, filter)
         }
 
+        // Register call state receiver
+        val callFilter = IntentFilter().apply {
+            addAction(ovh.tenjo.gpstracker.receiver.PhoneCallReceiver.ACTION_INCOMING_CALL)
+            addAction(ovh.tenjo.gpstracker.receiver.PhoneCallReceiver.ACTION_CALL_ENDED)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(callStateReceiver, callFilter, RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("UnspecifiedRegisterReceiverFlag")
+            registerReceiver(callStateReceiver, callFilter)
+        }
+
         setContent {
             GPSTrackerTheme {
                 Surface(
@@ -155,6 +183,7 @@ class MainActivity : ComponentActivity() {
         super.onDestroy()
         try {
             unregisterReceiver(stateUpdateReceiver)
+            unregisterReceiver(callStateReceiver)
         } catch (e: Exception) {
             Log.e(TAG, "Error unregistering receiver", e)
         }
@@ -269,6 +298,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun DebugUI(stateInfo: GpsTrackingService.StateInfo?, context: Context) {
     val scrollState = rememberScrollState()
+    val mainActivity = context as? MainActivity
 
     Column(
         modifier = Modifier
@@ -276,6 +306,50 @@ fun DebugUI(stateInfo: GpsTrackingService.StateInfo?, context: Context) {
             .verticalScroll(scrollState)
             .padding(16.dp)
     ) {
+        // INCOMING CALL ANSWER BUTTON - Shows at top when call is ringing
+        if (mainActivity?.isIncomingCall == true) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = Color(0xFF4CAF50) // Green for answer
+                )
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "📞 INCOMING CALL",
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = Color.White
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Button(
+                        onClick = {
+                            mainActivity.callManager.acceptCall()
+                            Log.d("DebugUI", "Answer button pressed")
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(64.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color.White
+                        )
+                    ) {
+                        Text(
+                            text = "ANSWER CALL",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = Color(0xFF4CAF50)
+                        )
+                    }
+                }
+            }
+        }
+
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
