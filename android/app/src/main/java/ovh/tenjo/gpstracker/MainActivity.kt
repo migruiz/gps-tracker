@@ -795,14 +795,6 @@ fun DebugUI(stateInfo: GpsTrackingService.StateInfo?, context: Context) {
                     text = "System Information",
                     style = MaterialTheme.typography.titleMedium
                 )
-                Text(
-                    text = "Battery check: Every ${AppConfig.BATTERY_CHECK_INTERVAL_MS / 60000} minutes",
-                    style = MaterialTheme.typography.bodySmall
-                )
-                Text(
-                    text = "Battery threshold: ${AppConfig.BATTERY_LOW_THRESHOLD}%",
-                    style = MaterialTheme.typography.bodySmall
-                )
             }
         }
     }
