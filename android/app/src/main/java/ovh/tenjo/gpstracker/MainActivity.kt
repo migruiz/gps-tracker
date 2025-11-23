@@ -660,22 +660,7 @@ fun DebugUI(stateInfo: GpsTrackingService.StateInfo?, context: Context) {
                     )
                 }
 
-                Row(
-                    modifier = Modifier.padding(vertical = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(16.dp)
-                            .background(
-                                if (stateInfo?.locationStatus?.isTracking == true) Color.Green else Color.Gray
-                            )
-                    )
-                    Text(
-                        text = "Tracking Active: ${if (stateInfo?.locationStatus?.isTracking == true) "Yes" else "No"}",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                }
+
 
                 if (stateInfo?.locationStatus?.gpsEnabled == false) {
                     Text(
@@ -739,92 +724,9 @@ fun DebugUI(stateInfo: GpsTrackingService.StateInfo?, context: Context) {
                     text = "Level: ${stateInfo?.batteryLevel ?: "N/A"}%",
                     style = MaterialTheme.typography.bodyLarge
                 )
-                Text(
-                    text = "Charging: ${if (stateInfo?.isCharging == true) "Yes" else "No"}",
-                    style = MaterialTheme.typography.bodyLarge
-                )
             }
         }
 
-        // HTTP Info (only show when awake)
-        if (stateInfo?.state == AppState.AWAKE) {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 8.dp)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = "HTTP API Connection",
-                        style = MaterialTheme.typography.titleMedium
-                    )
-
-                    Row(
-                        modifier = Modifier.padding(top = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(16.dp)
-                                .background(
-                                    if (stateInfo?.httpConnected == true) Color.Green else Color.Red
-                                )
-                        )
-                        Text(
-                            text = if (stateInfo?.httpConnected == true) "Ready" else "Not Ready",
-                            style = MaterialTheme.typography.bodyLarge
-                        )
-                    }
-
-                    Text(
-                        text = "Endpoint: ${stateInfo?.apiEndpoint ?: "N/A"}",
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.padding(top = 4.dp)
-                    )
-                    Text(
-                        text = "Device ID: ${stateInfo?.deviceId ?: "N/A"}",
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-            }
-
-            // GPS Tracking Info
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 8.dp)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = "GPS Tracking",
-                        style = MaterialTheme.typography.titleMedium
-                    )
-
-                    Row(
-                        modifier = Modifier.padding(top = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(16.dp)
-                                .background(
-                                    if (stateInfo?.gpsTracking == true) Color.Green else Color.Red
-                                )
-                        )
-                        Text(
-                            text = if (stateInfo?.gpsTracking == true) "Active" else "Inactive",
-                            style = MaterialTheme.typography.bodyLarge
-                        )
-                    }
-
-                    Text(
-                        text = "Update interval: ${AppConfig.GPS_UPDATE_INTERVAL_MS / 1000}s",
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.padding(top = 4.dp)
-                    )
-                }
-            }
-        }
 
         // Error Log Card
         val errorLog = stateInfo?.errorLog ?: emptyList()

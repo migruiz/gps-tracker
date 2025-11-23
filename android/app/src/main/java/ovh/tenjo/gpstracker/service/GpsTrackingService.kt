@@ -153,51 +153,31 @@ class GpsTrackingService : Service() {
         updateNotification("Getting location...")
         broadcastStateUpdate()
 
-        // Check if next minute will still be awake
-        val nextMinuteCalendar = Calendar.getInstance()
-        nextMinuteCalendar.add(Calendar.MINUTE, 1)
-        val nextHour = nextMinuteCalendar.get(Calendar.HOUR_OF_DAY)
-        val nextMinute = nextMinuteCalendar.get(Calendar.MINUTE)
-        val isLastUpdateBeforeIdle = !AppConfig.isAwakeTime(nextHour, nextMinute)
-
         // Connect HTTP client
         httpClient.connect()
+
+        // Get battery info once at the start
+        val batteryInfo = batteryMonitor.getBatteryInfo()
 
         // Request single location
         locationManager.requestSingleLocation(object : LocationManager.SingleLocationListener {
             override fun onLocationReceived(location: Location, provider: String) {
-                Log.d(TAG, "Location received, sending to API")
+                Log.d(TAG, "Location received, sending to API with battery info")
 
-                // Send location
+                // Send location with battery info in single request
                 httpClient.publishLocation(
                     location.latitude,
                     location.longitude,
                     location.accuracy,
                     location.time,
-                    provider
+                    provider,
+                    batteryInfo.level
                 )
 
-                // If this is the last update before idle, send battery info
-                if (isLastUpdateBeforeIdle) {
-                    Log.d(TAG, "Last update before idle, sending battery info")
-                    val batteryInfo = batteryMonitor.getBatteryInfo()
-
-                    // Give a moment for location to be sent
-                    Handler(Looper.getMainLooper()).postDelayed({
-                        // Always send battery info on last update (not just low battery)
-                        httpClient.publishBatteryWarning(batteryInfo.level, batteryInfo.isCharging)
-
-                        // Wait for battery to be sent, then cleanup
-                        Handler(Looper.getMainLooper()).postDelayed({
-                            cleanupAfterLocationUpdate(isLastUpdateBeforeIdle)
-                        }, 1000)
-                    }, 1000)
-                } else {
-                    // Regular update, cleanup immediately
-                    Handler(Looper.getMainLooper()).postDelayed({
-                        cleanupAfterLocationUpdate(isLastUpdateBeforeIdle)
-                    }, 1000)
-                }
+                // Cleanup after sending
+                Handler(Looper.getMainLooper()).postDelayed({
+                    cleanupAfterLocationUpdate()
+                }, 1000) // Give time for HTTP request to complete
 
                 updateNotification("Location sent ($provider)")
             }
@@ -209,23 +189,29 @@ class GpsTrackingService : Service() {
 
                 // Cleanup anyway
                 Handler(Looper.getMainLooper()).postDelayed({
-                    cleanupAfterLocationUpdate(isLastUpdateBeforeIdle)
+                    cleanupAfterLocationUpdate()
                 }, 500)
             }
         }, 30000L) // 30 second timeout
     }
 
-    private fun cleanupAfterLocationUpdate(isGoingToIdle: Boolean) {
+    private fun cleanupAfterLocationUpdate() {
         // Disconnect HTTP
         httpClient.disconnect()
 
-        if (isGoingToIdle) {
-            Log.d(TAG, "Transitioning to IDLE state")
-            currentState = AppState.IDLE
-            updateNotification("IDLE - Next update scheduled")
-        } else {
+        // Check if next minute is still in awake period
+        val nextMinuteCalendar = Calendar.getInstance()
+        nextMinuteCalendar.add(Calendar.MINUTE, 1)
+        val nextHour = nextMinuteCalendar.get(Calendar.HOUR_OF_DAY)
+        val nextMinute = nextMinuteCalendar.get(Calendar.MINUTE)
+        val isNextMinuteAwake = AppConfig.isAwakeTime(nextHour, nextMinute)
+
+        if (isNextMinuteAwake) {
             currentState = AppState.AWAKE
             updateNotification("AWAKE - Waiting for next alarm")
+        } else {
+            currentState = AppState.IDLE
+            updateNotification("IDLE - Next update scheduled")
         }
 
         broadcastStateUpdate()
@@ -375,7 +361,6 @@ class GpsTrackingService : Service() {
             deviceId = AppConfig.DEVICE_ID,
             gpsTracking = isProcessingLocation,
             batteryLevel = batteryInfo.level,
-            isCharging = batteryInfo.isCharging,
             isDeviceOwner = connectivityManager.isDeviceOwner(),
             hiddenAppsCount = 0,
             locationStatus = locationStatus,
@@ -396,7 +381,6 @@ class GpsTrackingService : Service() {
         val deviceId: String,
         val gpsTracking: Boolean,
         val batteryLevel: Int,
-        val isCharging: Boolean,
         val isDeviceOwner: Boolean,
         val hiddenAppsCount: Int,
         val locationStatus: LocationStatus,

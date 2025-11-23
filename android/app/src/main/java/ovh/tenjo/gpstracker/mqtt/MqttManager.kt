@@ -74,15 +74,15 @@ class HttpApiClient(private val context: Context) {
         connectionCallback?.onDisconnected()
     }
 
-    fun publishLocation(latitude: Double, longitude: Double, accuracy: Float, timestamp: Long, provider: String) {
+    fun publishLocation(latitude: Double, longitude: Double, accuracy: Float, timestamp: Long, provider: String, batteryLevel: Int) {
         val data = mapOf(
-            "type" to "location",
             "latitude" to latitude,
             "longitude" to longitude,
             "accuracy" to accuracy,
             "timestamp" to timestamp,
             "provider" to provider,
-            "device_id" to AppConfig.DEVICE_ID
+            "device_id" to AppConfig.DEVICE_ID,
+            "battery_level" to batteryLevel
         )
 
         postData(data, "location")
