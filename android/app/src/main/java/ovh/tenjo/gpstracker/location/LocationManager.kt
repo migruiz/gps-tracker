@@ -50,16 +50,22 @@ class LocationManager(private val context: Context) {
             return
         }
 
-        // Check if GPS provider is available
-        if (!locationManager.isProviderEnabled(AndroidLocationManager.GPS_PROVIDER)) {
-            Log.w(TAG, "GPS provider is not enabled")
-            listener?.onLocationError("GPS is disabled")
+        // Check provider availability
+        val gpsEnabled = locationManager.isProviderEnabled(AndroidLocationManager.GPS_PROVIDER)
+        val networkEnabled = locationManager.isProviderEnabled(AndroidLocationManager.NETWORK_PROVIDER)
+
+        Log.d(TAG, "Provider status - GPS: $gpsEnabled, Network: $networkEnabled")
+
+        if (!gpsEnabled && !networkEnabled) {
+            Log.e(TAG, "No location providers are enabled")
+            listener?.onLocationError("No location providers enabled")
+            return
         }
 
         locationListener = object : LocationListener {
             override fun onLocationChanged(location: Location) {
                 val provider = location.provider ?: "unknown"
-                Log.d(TAG, "Location update from $provider: ${location.latitude}, ${location.longitude}")
+                Log.d(TAG, "Location update from $provider: ${location.latitude}, ${location.longitude}, accuracy: ${location.accuracy}m")
                 listener?.onLocationUpdate(location, provider)
             }
 
@@ -79,28 +85,48 @@ class LocationManager(private val context: Context) {
         }
 
         try {
+            var providersRequested = 0
+
             // Request location updates from GPS provider
-            locationManager.requestLocationUpdates(
-                AndroidLocationManager.GPS_PROVIDER,
-                AppConfig.GPS_UPDATE_INTERVAL_MS,
-                0f, // No minimum distance
-                locationListener!!
-            )
-
-            // Also try network provider as backup
-
-            if (locationManager.isProviderEnabled(AndroidLocationManager.NETWORK_PROVIDER)) {
-                locationManager.requestLocationUpdates(
-                    AndroidLocationManager.NETWORK_PROVIDER,
-                    AppConfig.GPS_UPDATE_INTERVAL_MS,
-                    0f,
-                    locationListener!!
-                )
+            if (gpsEnabled) {
+                try {
+                    locationManager.requestLocationUpdates(
+                        AndroidLocationManager.GPS_PROVIDER,
+                        AppConfig.GPS_UPDATE_INTERVAL_MS,
+                        0f, // No minimum distance
+                        locationListener!!
+                    )
+                    providersRequested++
+                    Log.d(TAG, "Successfully requested GPS updates (interval: ${AppConfig.GPS_UPDATE_INTERVAL_MS}ms)")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to request GPS updates", e)
+                }
             }
 
+            // Also request network provider updates
+            if (networkEnabled) {
+                try {
+                    locationManager.requestLocationUpdates(
+                        AndroidLocationManager.NETWORK_PROVIDER,
+                        AppConfig.GPS_UPDATE_INTERVAL_MS,
+                        0f,
+                        locationListener!!
+                    )
+                    providersRequested++
+                    Log.d(TAG, "Successfully requested Network updates (interval: ${AppConfig.GPS_UPDATE_INTERVAL_MS}ms)")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to request Network updates", e)
+                }
+            }
+
+            if (providersRequested == 0) {
+                Log.e(TAG, "Failed to request updates from any provider")
+                listener?.onLocationError("Failed to register location listeners")
+                return
+            }
 
             isTracking = true
-            Log.d(TAG, "Started location updates")
+            Log.d(TAG, "Started location updates from $providersRequested provider(s)")
         } catch (e: SecurityException) {
             Log.e(TAG, "Security exception starting location updates", e)
             listener?.onLocationError("Security exception: ${e.message}")
@@ -123,14 +149,25 @@ class LocationManager(private val context: Context) {
     fun isTracking(): Boolean = isTracking
 
     private fun hasLocationPermission(): Boolean {
-        return ActivityCompat.checkSelfPermission(
+        val hasFineLocation = ActivityCompat.checkSelfPermission(
             context,
             Manifest.permission.ACCESS_FINE_LOCATION
         ) == PackageManager.PERMISSION_GRANTED
+
+        val hasCoarseLocation = ActivityCompat.checkSelfPermission(
+            context,
+            Manifest.permission.ACCESS_COARSE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+
+        Log.d(TAG, "Permissions - Fine: $hasFineLocation, Coarse: $hasCoarseLocation")
+
+        // Need at least one location permission, but ideally both
+        return hasFineLocation || hasCoarseLocation
     }
 
     /**
      * Request a single location update with timeout
+     * Waits for locations from both providers and returns the best one
      */
     fun requestSingleLocation(callback: SingleLocationListener, timeoutMs: Long = 30000L) {
         if (!hasLocationPermission()) {
@@ -141,22 +178,26 @@ class LocationManager(private val context: Context) {
 
         val handler = Handler(Looper.getMainLooper())
         var locationReceived = false
+        var bestLocation: Location? = null
+        var bestProvider: String? = null
+
+        // Wait a bit to collect locations from multiple providers
+        val collectionTimeMs = 5000L
 
         val singleLocationListener = object : LocationListener {
             override fun onLocationChanged(location: Location) {
                 if (!locationReceived) {
-                    locationReceived = true
                     val provider = location.provider ?: "unknown"
-                    Log.d(TAG, "Single location received from $provider: ${location.latitude}, ${location.longitude}")
+                    Log.d(TAG, "Single location received from $provider: ${location.latitude}, ${location.longitude}, accuracy: ${location.accuracy}m")
 
-                    // Remove this listener
-                    try {
-                        locationManager.removeUpdates(this)
-                    } catch (e: SecurityException) {
-                        Log.e(TAG, "Error removing location updates", e)
+                    // Keep the best location (most accurate)
+                    if (bestLocation == null || location.accuracy < bestLocation!!.accuracy) {
+                        bestLocation = location
+                        bestProvider = provider
+                        Log.d(TAG, "Updated best location to $provider (accuracy: ${location.accuracy}m)")
+                    } else {
+                        Log.d(TAG, "Keeping previous best location from $bestProvider (accuracy: ${bestLocation!!.accuracy}m vs ${location.accuracy}m)")
                     }
-
-                    callback.onLocationReceived(location, provider)
                 }
             }
 
@@ -173,6 +214,8 @@ class LocationManager(private val context: Context) {
         }
 
         try {
+            var providersRequested = 0
+
             // Try GPS first
             if (locationManager.isProviderEnabled(AndroidLocationManager.GPS_PROVIDER)) {
                 locationManager.requestLocationUpdates(
@@ -182,6 +225,10 @@ class LocationManager(private val context: Context) {
                     singleLocationListener,
                     Looper.getMainLooper()
                 )
+                providersRequested++
+                Log.d(TAG, "Requested single location from GPS provider")
+            } else {
+                Log.w(TAG, "GPS provider not enabled")
             }
 
             // Also request from network provider as backup
@@ -193,9 +240,35 @@ class LocationManager(private val context: Context) {
                     singleLocationListener,
                     Looper.getMainLooper()
                 )
+                providersRequested++
+                Log.d(TAG, "Requested single location from Network provider")
+            } else {
+                Log.w(TAG, "Network provider not enabled")
             }
 
-            // Set timeout
+            if (providersRequested == 0) {
+                Log.e(TAG, "No location providers available")
+                callback.onLocationTimeout("No location providers available")
+                return
+            }
+
+            Log.d(TAG, "Waiting ${collectionTimeMs}ms to collect locations from $providersRequested provider(s)")
+
+            // Wait to collect locations from multiple providers
+            handler.postDelayed({
+                if (!locationReceived && bestLocation != null) {
+                    locationReceived = true
+                    try {
+                        locationManager.removeUpdates(singleLocationListener)
+                    } catch (e: SecurityException) {
+                        Log.e(TAG, "Error removing location updates", e)
+                    }
+                    Log.i(TAG, "Returning best location from $bestProvider (accuracy: ${bestLocation!!.accuracy}m)")
+                    callback.onLocationReceived(bestLocation!!, bestProvider!!)
+                }
+            }, collectionTimeMs)
+
+            // Set final timeout
             handler.postDelayed({
                 if (!locationReceived) {
                     locationReceived = true
@@ -204,8 +277,14 @@ class LocationManager(private val context: Context) {
                     } catch (e: SecurityException) {
                         Log.e(TAG, "Error removing location updates on timeout", e)
                     }
-                    Log.w(TAG, "Single location request timed out")
-                    callback.onLocationTimeout("Location request timed out after ${timeoutMs}ms")
+
+                    if (bestLocation != null) {
+                        Log.w(TAG, "Timeout reached but have location from $bestProvider, returning it")
+                        callback.onLocationReceived(bestLocation!!, bestProvider!!)
+                    } else {
+                        Log.e(TAG, "Single location request timed out with no location received")
+                        callback.onLocationTimeout("Location request timed out after ${timeoutMs}ms")
+                    }
                 }
             }, timeoutMs)
 
