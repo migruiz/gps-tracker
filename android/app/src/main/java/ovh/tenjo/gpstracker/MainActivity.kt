@@ -687,64 +687,7 @@ fun DebugUI(stateInfo: GpsTrackingService.StateInfo?, context: Context) {
             }
         }
 
-        // VPN Status Card
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 8.dp)
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    text = "Internet Sinkhole (VPN)",
-                    style = MaterialTheme.typography.titleMedium
-                )
 
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Row(
-                    modifier = Modifier.padding(vertical = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(16.dp)
-                            .background(
-                                if (stateInfo?.vpnStatus?.isActive == true) Color.Green else Color.Red
-                            )
-                    )
-                    Text(
-                        text = if (stateInfo?.vpnStatus?.isActive == true) "Active - Blocking all other apps" else "Inactive",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                }
-
-                Text(
-                    text = "Blocks all network traffic except this app",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color.Gray,
-                    modifier = Modifier.padding(top = 4.dp)
-                )
-
-                // Show blocked apps attempts
-                val blockedAttempts = stateInfo?.vpnStatus?.blockedAttempts ?: emptyList()
-                if (blockedAttempts.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        text = "Blocked Network Attempts:",
-                        style = MaterialTheme.typography.titleSmall
-                    )
-
-                    blockedAttempts.take(5).forEach { attempt ->
-                        val timeAgo = formatTimeAgo(attempt.lastAttemptTime)
-                        Text(
-                            text = "• ${attempt.appName}: ${attempt.attemptCount} attempts ($timeAgo)",
-                            style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.padding(start = 8.dp, top = 4.dp)
-                        )
-                    }
-                }
-            }
-        }
 
         // Device Owner Status
         Card(
