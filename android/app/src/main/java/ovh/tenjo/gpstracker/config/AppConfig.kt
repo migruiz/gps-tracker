@@ -24,9 +24,9 @@ object AppConfig {
 
     // Awake Time Slots (hardcoded schedule)
     val AWAKE_TIME_SLOTS = listOf(
-        TimeSlot(8, 0, 11, 0),
-        TimeSlot(14, 0, 18, 30),
-        TimeSlot(18, 45, 19, 0)
+        TimeSlot(7, 50, 8, 40),
+        TimeSlot(14, 10, 15, 0),
+        TimeSlot(18, 45, 20, 0)
     )
 
     // Check if current time is within any awake time slot
