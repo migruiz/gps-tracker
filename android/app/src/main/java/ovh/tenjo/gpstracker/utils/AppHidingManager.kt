@@ -32,8 +32,8 @@ class AppHidingManager(private val context: Context) {
      */
     private val googleAppsToHide = setOf(
         // Google Play Services and Core
-        "com.google.android.gms",
-        "com.google.android.gsf",
+        //"com.google.android.gms",
+        //"com.google.android.gsf",
 
         // Google Play Store
         "com.android.vending",
