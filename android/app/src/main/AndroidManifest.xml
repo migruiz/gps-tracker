@@ -96,6 +96,11 @@
             </intent-filter>
         </receiver>
 
+        <!-- Location Alarm Receiver for scheduled GPS updates -->
+        <receiver
+            android:name=".receiver.LocationAlarmReceiver"
+            android:exported="false" />
+
         <!-- Foreground Service for GPS tracking -->
         <service
             android:name=".service.GpsTrackingService"

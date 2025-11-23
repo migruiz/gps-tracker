@@ -1,10 +1,8 @@
 package ovh.tenjo.gpstracker.service
 
 import android.app.*
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.content.ServiceConnection
 import android.location.Location
 import android.location.LocationManager as AndroidLocationManager
 import android.os.*
@@ -14,13 +12,13 @@ import ovh.tenjo.gpstracker.MainActivity
 import ovh.tenjo.gpstracker.R
 import ovh.tenjo.gpstracker.config.AppConfig
 import ovh.tenjo.gpstracker.location.LocationManager
-import ovh.tenjo.gpstracker.location.SinkholeVpnService
 import ovh.tenjo.gpstracker.model.AppState
 import ovh.tenjo.gpstracker.mqtt.HttpApiClient
+import ovh.tenjo.gpstracker.utils.AlarmScheduler
+import ovh.tenjo.gpstracker.utils.AppHidingManager
 import ovh.tenjo.gpstracker.utils.BatteryMonitor
 import ovh.tenjo.gpstracker.utils.ConnectivityManager
-import ovh.tenjo.gpstracker.utils.AppHidingManager
-import java.text.SimpleDateFormat
+import ovh.tenjo.gpstracker.receiver.LocationAlarmReceiver
 import java.util.*
 import java.util.concurrent.ConcurrentLinkedQueue
 
@@ -31,9 +29,11 @@ class GpsTrackingService : Service() {
     private lateinit var batteryMonitor: BatteryMonitor
     private lateinit var connectivityManager: ConnectivityManager
     private lateinit var appHidingManager: AppHidingManager
+    private lateinit var alarmScheduler: AlarmScheduler
 
     private var currentState: AppState = AppState.IDLE
     private var wakeLock: PowerManager.WakeLock? = null
+    private var isProcessingLocation = false
 
     // Error logging
     private val errorLog = ConcurrentLinkedQueue<ErrorEntry>()
@@ -44,23 +44,6 @@ class GpsTrackingService : Service() {
         val module: String,
         val message: String
     )
-
-
-
-    private val handler = Handler(Looper.getMainLooper())
-    private val stateCheckRunnable = object : Runnable {
-        override fun run() {
-            checkAndUpdateState()
-            handler.postDelayed(this, 60000) // Check every minute
-        }
-    }
-
-    private val batteryCheckRunnable = object : Runnable {
-        override fun run() {
-            performBatteryCheck()
-            handler.postDelayed(this, AppConfig.BATTERY_CHECK_INTERVAL_MS)
-        }
-    }
 
     private val binder = LocalBinder()
 
@@ -78,69 +61,59 @@ class GpsTrackingService : Service() {
         httpClient = HttpApiClient(this)
         batteryMonitor = BatteryMonitor(this)
         connectivityManager = ConnectivityManager(this)
-        appHidingManager = AppHidingManager(this)
-
-        setupLocationListener()
-        setupHttpCallback()
+        alarmScheduler = AlarmScheduler(this)
 
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, createNotification("Initializing..."))
 
         acquireWakeLock()
 
-
-
         // Setup kiosk mode if device owner
         if (connectivityManager.isDeviceOwner()) {
             connectivityManager.enableKioskMode()
             connectivityManager.restrictBackgroundData()
             connectivityManager.enableAlwaysOnVPN()
-
-            // Apply aggressive power restrictions to minimize CPU usage
             connectivityManager.applyAggressivePowerRestrictions()
 
-            // AGGRESSIVE app removal - hide all non-critical apps to save CPU/battery
             Log.i(TAG, "Device owner detected - initiating AGGRESSIVE app removal")
             updateNotification("Stopping non-critical apps...")
 
-            // Run in background thread to avoid blocking service startup
             Thread {
                 try {
                     val result = appHidingManager.hideNonCriticalApps()
                     Log.i(TAG, "AGGRESSIVE app hiding completed: ${result.message}")
 
-                    handler.post {
+                    Handler(Looper.getMainLooper()).post {
                         updateNotification("Stopped ${result.successCount} apps - Maximum CPU optimization active")
                     }
                 } catch (e: Exception) {
                     Log.e(TAG, "Error during app hiding: ${e.message}", e)
-                    handler.post {
+                    Handler(Looper.getMainLooper()).post {
                         updateNotification("App optimization error - continuing")
                     }
                 }
             }.start()
-
         }
 
-        // Start state checking
-        handler.post(stateCheckRunnable)
+        // Schedule the first alarm
+        scheduleNextLocationAlarm()
+    }
 
-        // Start battery checking (every hour)
-        handler.post(batteryCheckRunnable)
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        when (intent?.action) {
+            LocationAlarmReceiver.ACTION_LOCATION_ALARM -> {
+                Log.d(TAG, "Location alarm received")
+                handleLocationAlarm()
+            }
+        }
+        return START_STICKY
     }
 
     override fun onDestroy() {
         super.onDestroy()
         Log.d(TAG, "Service destroyed")
 
-        handler.removeCallbacks(stateCheckRunnable)
-        handler.removeCallbacks(batteryCheckRunnable)
-
-        locationManager.stopLocationUpdates()
-        httpClient.disconnect()
-
-
-
+        alarmScheduler.cancelAlarm()
         releaseWakeLock()
     }
 
@@ -148,7 +121,6 @@ class GpsTrackingService : Service() {
         val error = ErrorEntry(System.currentTimeMillis(), module, message)
         errorLog.offer(error)
 
-        // Keep log size manageable
         while (errorLog.size > MAX_ERROR_LOG_SIZE) {
             errorLog.poll()
         }
@@ -157,123 +129,123 @@ class GpsTrackingService : Service() {
         broadcastStateUpdate()
     }
 
-    private fun setupLocationListener() {
-        locationManager.setLocationUpdateListener(object : LocationManager.LocationUpdateListener {
-            override fun onLocationUpdate(location: Location, provider: String) {
-                if (currentState == AppState.AWAKE) {
-                    httpClient.publishLocation(
-                        location.latitude,
-                        location.longitude,
-                        location.accuracy,
-                        location.time,
-                        provider
-                    )
-                    updateNotification("Location sent ($provider): ${location.latitude}, ${location.longitude}")
-                    broadcastStateUpdate()
-                }
-            }
+    private fun handleLocationAlarm() {
+        if (isProcessingLocation) {
+            Log.w(TAG, "Already processing a location update, skipping")
+            return
+        }
 
-            override fun onLocationError(error: String) {
-                logError("Location", error)
-                updateNotification("Location error: $error")
-            }
-        })
-    }
-
-    private fun setupHttpCallback() {
-        httpClient.setConnectionCallback(object : HttpApiClient.ConnectionCallback {
-            override fun onConnected() {
-                Log.d(TAG, "HTTP client ready")
-                updateNotification("HTTP Ready")
-                broadcastStateUpdate()
-            }
-
-            override fun onDisconnected() {
-                Log.d(TAG, "HTTP client disconnected")
-                updateNotification("HTTP Disconnected")
-                broadcastStateUpdate()
-            }
-
-            override fun onError(error: String) {
-                logError("HTTP", error)
-                updateNotification("HTTP Error: $error")
-            }
-        })
-    }
-
-    private fun checkAndUpdateState() {
+        isProcessingLocation = true
         val calendar = Calendar.getInstance()
         val hour = calendar.get(Calendar.HOUR_OF_DAY)
         val minute = calendar.get(Calendar.MINUTE)
 
-        val shouldBeAwake = AppConfig.isAwakeTime(hour, minute)
+        val isAwakeTime = AppConfig.isAwakeTime(hour, minute)
 
-        if (shouldBeAwake && currentState != AppState.AWAKE) {
-            transitionToAwakeState()
-        } else if (!shouldBeAwake && currentState == AppState.AWAKE) {
-            transitionToIdleState()
+        if (!isAwakeTime) {
+            Log.d(TAG, "Alarm fired but not in awake time, scheduling next alarm")
+            isProcessingLocation = false
+            scheduleNextLocationAlarm()
+            return
         }
-    }
 
-    private fun transitionToAwakeState() {
-        Log.d(TAG, "Transitioning to AWAKE state")
+        Log.d(TAG, "Processing location update")
         currentState = AppState.AWAKE
+        updateNotification("Getting location...")
+        broadcastStateUpdate()
 
+        // Check if next minute will still be awake
+        val nextMinuteCalendar = Calendar.getInstance()
+        nextMinuteCalendar.add(Calendar.MINUTE, 1)
+        val nextHour = nextMinuteCalendar.get(Calendar.HOUR_OF_DAY)
+        val nextMinute = nextMinuteCalendar.get(Calendar.MINUTE)
+        val isLastUpdateBeforeIdle = !AppConfig.isAwakeTime(nextHour, nextMinute)
 
-
-        // Connect HTTP client (just marks as ready)
+        // Connect HTTP client
         httpClient.connect()
 
-        // Start GPS tracking
-        locationManager.startLocationUpdates()
+        // Request single location
+        locationManager.requestSingleLocation(object : LocationManager.SingleLocationListener {
+            override fun onLocationReceived(location: Location, provider: String) {
+                Log.d(TAG, "Location received, sending to API")
 
-        updateNotification("AWAKE - Tracking active")
-        broadcastStateUpdate()
+                // Send location
+                httpClient.publishLocation(
+                    location.latitude,
+                    location.longitude,
+                    location.accuracy,
+                    location.time,
+                    provider
+                )
+
+                // If this is the last update before idle, send battery info
+                if (isLastUpdateBeforeIdle) {
+                    Log.d(TAG, "Last update before idle, sending battery info")
+                    val batteryInfo = batteryMonitor.getBatteryInfo()
+
+                    // Give a moment for location to be sent
+                    Handler(Looper.getMainLooper()).postDelayed({
+                        if (batteryInfo.level <= AppConfig.BATTERY_LOW_THRESHOLD && !batteryInfo.isCharging) {
+                            httpClient.publishBatteryWarning(batteryInfo.level, batteryInfo.isCharging)
+                        }
+
+                        // Wait for battery to be sent, then cleanup
+                        Handler(Looper.getMainLooper()).postDelayed({
+                            cleanupAfterLocationUpdate(isLastUpdateBeforeIdle)
+                        }, 1000)
+                    }, 1000)
+                } else {
+                    // Regular update, cleanup immediately
+                    Handler(Looper.getMainLooper()).postDelayed({
+                        cleanupAfterLocationUpdate(isLastUpdateBeforeIdle)
+                    }, 1000)
+                }
+
+                updateNotification("Location sent ($provider)")
+            }
+
+            override fun onLocationTimeout(error: String) {
+                Log.e(TAG, "Location timeout: $error")
+                logError("Location", error)
+                updateNotification("Location error: $error")
+
+                // Cleanup anyway
+                Handler(Looper.getMainLooper()).postDelayed({
+                    cleanupAfterLocationUpdate(isLastUpdateBeforeIdle)
+                }, 500)
+            }
+        }, 30000L) // 30 second timeout
     }
 
-    private fun transitionToIdleState() {
-        Log.d(TAG, "Transitioning to IDLE state")
-        currentState = AppState.IDLE
-
-        // Stop GPS tracking
-        locationManager.stopLocationUpdates()
-
-        // Disconnect HTTP client
+    private fun cleanupAfterLocationUpdate(isGoingToIdle: Boolean) {
+        // Disconnect HTTP
         httpClient.disconnect()
 
+        if (isGoingToIdle) {
+            Log.d(TAG, "Transitioning to IDLE state")
+            currentState = AppState.IDLE
+            updateNotification("IDLE - Next update scheduled")
+        } else {
+            updateNotification("AWAKE - Waiting for next minute")
+        }
 
-
-        updateNotification("IDLE - Power saving mode")
         broadcastStateUpdate()
+
+        // Schedule next alarm
+        scheduleNextLocationAlarm()
+
+        isProcessingLocation = false
     }
 
-    private fun performBatteryCheck() {
-        Log.d(TAG, "Performing battery check")
+    private fun scheduleNextLocationAlarm() {
+        val isInActiveWindow = alarmScheduler.scheduleNextAlarm()
 
-        val previousState = currentState
-        currentState = AppState.BATTERY_CHECK
-
-        val batteryInfo = batteryMonitor.getBatteryInfo()
-
-
-
-        // Connect HTTP client if not already
-        if (!httpClient.isConnected()) {
-            httpClient.connect()
-            Thread.sleep(1000)
-        }
-
-        // Send battery warning if below threshold
-        if (batteryInfo.level <= AppConfig.BATTERY_LOW_THRESHOLD && !batteryInfo.isCharging) {
-            httpClient.publishBatteryWarning(batteryInfo.level, batteryInfo.isCharging)
-        }
-
-        // Return to previous state
-        currentState = previousState
-
-        // If was idle, disable network again
-        if (previousState == AppState.IDLE) {
-            httpClient.disconnect()
+        if (isInActiveWindow) {
+            Log.d(TAG, "Next alarm scheduled for next minute (active period)")
+            currentState = AppState.AWAKE
+        } else {
+            Log.d(TAG, "Next alarm scheduled for next active period")
+            currentState = AppState.IDLE
         }
 
         broadcastStateUpdate()
@@ -351,10 +323,9 @@ class GpsTrackingService : Service() {
         return LocationStatus(
             gpsEnabled = gpsEnabled,
             networkEnabled = networkEnabled,
-            isTracking = locationManager.isTracking()
+            isTracking = isProcessingLocation
         )
     }
-
 
     fun getErrorLog(): List<ErrorEntry> {
         return errorLog.toList()
@@ -369,11 +340,11 @@ class GpsTrackingService : Service() {
             httpConnected = httpClient.isConnected(),
             apiEndpoint = AppConfig.API_ENDPOINT,
             deviceId = AppConfig.DEVICE_ID,
-            gpsTracking = locationManager.isTracking(),
+            gpsTracking = isProcessingLocation,
             batteryLevel = batteryInfo.level,
             isCharging = batteryInfo.isCharging,
             isDeviceOwner = connectivityManager.isDeviceOwner(),
-            hiddenAppsCount = 0,//appHidingManager.getHiddenAppsCount()
+            hiddenAppsCount = 0,
             locationStatus = locationStatus,
             errorLog = getErrorLog()
         )
@@ -384,8 +355,6 @@ class GpsTrackingService : Service() {
         val networkEnabled: Boolean,
         val isTracking: Boolean
     )
-
-
 
     data class StateInfo(
         val state: AppState,

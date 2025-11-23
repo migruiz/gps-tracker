@@ -1,8 +1,6 @@
 package ovh.tenjo.gpstracker.model
 
 enum class AppState {
-    IDLE,           // Device in sleep mode, all disabled
-    AWAKE,          // Active tracking mode
-    BATTERY_CHECK   // Hourly battery check mode
+    IDLE,           // Device in sleep mode, waiting for next alarm
+    AWAKE           // Active tracking mode (processing location update)
 }
-

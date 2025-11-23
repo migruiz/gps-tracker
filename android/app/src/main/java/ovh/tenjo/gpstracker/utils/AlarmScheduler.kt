@@ -90,11 +90,21 @@ class AlarmScheduler(private val context: Context) {
         )
 
         // Use setExactAndAllowWhileIdle for precise timing even in Doze mode
-        alarmManager.setExactAndAllowWhileIdle(
-            AlarmManager.RTC_WAKEUP,
-            triggerAtMillis,
-            pendingIntent
-        )
+        try {
+            alarmManager.setExactAndAllowWhileIdle(
+                AlarmManager.RTC_WAKEUP,
+                triggerAtMillis,
+                pendingIntent
+            )
+        } catch (e: SecurityException) {
+            // On Android 12+, if exact alarm permission is not granted, fall back to inexact alarm
+            Log.w(TAG, "Exact alarm permission not granted, using inexact alarm", e)
+            alarmManager.setAndAllowWhileIdle(
+                AlarmManager.RTC_WAKEUP,
+                triggerAtMillis,
+                pendingIntent
+            )
+        }
     }
 
     fun cancelAlarm() {
@@ -115,4 +125,3 @@ class AlarmScheduler(private val context: Context) {
         private const val ALARM_REQUEST_CODE = 1001
     }
 }
-

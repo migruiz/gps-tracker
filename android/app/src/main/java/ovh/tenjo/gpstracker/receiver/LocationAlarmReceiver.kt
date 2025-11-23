@@ -3,6 +3,7 @@ package ovh.tenjo.gpstracker.receiver
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.util.Log
 import ovh.tenjo.gpstracker.service.GpsTrackingService
 
@@ -14,7 +15,13 @@ class LocationAlarmReceiver : BroadcastReceiver() {
         val serviceIntent = Intent(context, GpsTrackingService::class.java).apply {
             action = ACTION_LOCATION_ALARM
         }
-        context.startForegroundService(serviceIntent)
+
+        // Use appropriate method based on API level
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            context.startForegroundService(serviceIntent)
+        } else {
+            context.startService(serviceIntent)
+        }
     }
 
     companion object {
@@ -22,4 +29,3 @@ class LocationAlarmReceiver : BroadcastReceiver() {
         const val ACTION_LOCATION_ALARM = "ovh.tenjo.gpstracker.LOCATION_ALARM"
     }
 }
-
