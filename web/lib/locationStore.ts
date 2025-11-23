@@ -7,6 +7,7 @@ export interface LocationData {
   timestamp: number;
   provider: string;
   device_id: string;
+  battery_level?: number;
 }
 
 class LocationStore {
