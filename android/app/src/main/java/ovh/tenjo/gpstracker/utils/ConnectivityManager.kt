@@ -160,6 +160,21 @@ class ConnectivityManager(private val context: Context) {
         }
     }
 
+    fun enableAlwaysOnVPN() {
+        if (!isDeviceOwner()) {
+            Log.w(TAG, "Cannot enable alwwyas onVPN- not device owner")
+            return
+        }
+
+        try {
+// Set your app as the always-on VPN
+            devicePolicyManager.setAlwaysOnVpnPackage(adminComponent, "ovh.tenjo.gpstracker", true)
+
+        } catch (e: Exception) {
+            Log.e(TAG, "Error enabling VPN ALways on  mode", e)
+        }
+    }
+
     companion object {
         private const val TAG = "ConnectivityManager"
     }

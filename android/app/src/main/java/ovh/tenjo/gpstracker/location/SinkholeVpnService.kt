@@ -37,9 +37,10 @@ class SinkholeVpnService : VpnService() {
                 .addAddress("10.0.0.1", 32)
                 .addRoute("0.0.0.0", 0)
                 .addRoute("::", 0) // IPv6
+                .setBlocking(true)
 
             // ONLY allow your intended app
-            builder.addAllowedApplication(" ovh.tenjo.gpstracker")
+            builder.addDisallowedApplication("ovh.tenjo.gpstracker")
 
             // Establish dummy TUN
             vpnInterface = builder.establish()

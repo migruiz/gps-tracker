@@ -94,6 +94,7 @@ class GpsTrackingService : Service() {
         if (connectivityManager.isDeviceOwner()) {
             connectivityManager.enableKioskMode()
             connectivityManager.restrictBackgroundData()
+            connectivityManager.enableAlwaysOnVPN()
 
             // Apply aggressive power restrictions to minimize CPU usage
             connectivityManager.applyAggressivePowerRestrictions()
