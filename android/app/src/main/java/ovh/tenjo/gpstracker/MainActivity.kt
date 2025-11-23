@@ -65,7 +65,7 @@ class MainActivity : ComponentActivity() {
 
     private val stateUpdateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            updateStateInfo()
+            // updateStateInfo()
         }
     }
 
@@ -239,9 +239,11 @@ class MainActivity : ComponentActivity() {
 
     private fun startTrackingService() {
         if (!isServiceRunning(GpsTrackingService::class.java)) {
-            val intent = Intent(this, GpsTrackingService::class.java)
+            val intent = Intent(this, GpsTrackingService::class.java).apply {
+                action = GpsTrackingService.ACTION_INITIAL_SETUP
+            }
             ContextCompat.startForegroundService(this, intent)
-            Log.d(TAG, "Started tracking service")
+            Log.d(TAG, "Started tracking service with initial setup")
         }
     }
 
@@ -592,7 +594,6 @@ fun DebugUI(stateInfo: GpsTrackingService.StateInfo?, context: Context) {
                 val stateColor = when (stateInfo?.state) {
                     AppState.IDLE -> Color.Gray
                     AppState.AWAKE -> Color.Green
-                    AppState.BATTERY_CHECK -> Color.Yellow
                     null -> Color.Red
                 }
 

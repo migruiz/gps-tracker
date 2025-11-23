@@ -61,13 +61,30 @@ class GpsTrackingService : Service() {
         httpClient = HttpApiClient(this)
         batteryMonitor = BatteryMonitor(this)
         connectivityManager = ConnectivityManager(this)
+        appHidingManager = AppHidingManager(this)
         alarmScheduler = AlarmScheduler(this)
 
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, createNotification("Initializing..."))
 
-        acquireWakeLock()
+        // Don't acquire WakeLock here anymore - only acquire when processing location
+    }
 
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        when (intent?.action) {
+            LocationAlarmReceiver.ACTION_LOCATION_ALARM -> {
+                Log.d(TAG, "Location alarm received")
+                handleLocationAlarm()
+            }
+            ACTION_INITIAL_SETUP -> {
+                Log.d(TAG, "Initial setup")
+                performInitialSetup()
+            }
+        }
+        return START_NOT_STICKY // Changed from START_STICKY - we want alarm to restart us, not system
+    }
+
+    private fun performInitialSetup() {
         // Setup kiosk mode if device owner
         if (connectivityManager.isDeviceOwner()) {
             connectivityManager.enableKioskMode()
@@ -97,43 +114,23 @@ class GpsTrackingService : Service() {
 
         // Schedule the first alarm
         scheduleNextLocationAlarm()
-    }
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        when (intent?.action) {
-            LocationAlarmReceiver.ACTION_LOCATION_ALARM -> {
-                Log.d(TAG, "Location alarm received")
-                handleLocationAlarm()
-            }
-        }
-        return START_STICKY
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        Log.d(TAG, "Service destroyed")
-
-        alarmScheduler.cancelAlarm()
-        releaseWakeLock()
-    }
-
-    private fun logError(module: String, message: String) {
-        val error = ErrorEntry(System.currentTimeMillis(), module, message)
-        errorLog.offer(error)
-
-        while (errorLog.size > MAX_ERROR_LOG_SIZE) {
-            errorLog.poll()
-        }
-
-        Log.e(TAG, "[$module] $message")
-        broadcastStateUpdate()
+        // Stop service after scheduling alarm
+        Handler(Looper.getMainLooper()).postDelayed({
+            Log.d(TAG, "Initial setup complete, stopping service")
+            stopSelf()
+        }, 2000) // Give time for device owner setup to complete
     }
 
     private fun handleLocationAlarm() {
         if (isProcessingLocation) {
             Log.w(TAG, "Already processing a location update, skipping")
+            stopSelf()
             return
         }
+
+        // Acquire WakeLock for this operation only
+        acquireWakeLock()
 
         isProcessingLocation = true
         val calendar = Calendar.getInstance()
@@ -146,6 +143,8 @@ class GpsTrackingService : Service() {
             Log.d(TAG, "Alarm fired but not in awake time, scheduling next alarm")
             isProcessingLocation = false
             scheduleNextLocationAlarm()
+            releaseWakeLock()
+            stopSelf()
             return
         }
 
@@ -185,9 +184,8 @@ class GpsTrackingService : Service() {
 
                     // Give a moment for location to be sent
                     Handler(Looper.getMainLooper()).postDelayed({
-                        if (batteryInfo.level <= AppConfig.BATTERY_LOW_THRESHOLD && !batteryInfo.isCharging) {
-                            httpClient.publishBatteryWarning(batteryInfo.level, batteryInfo.isCharging)
-                        }
+                        // Always send battery info on last update (not just low battery)
+                        httpClient.publishBatteryWarning(batteryInfo.level, batteryInfo.isCharging)
 
                         // Wait for battery to be sent, then cleanup
                         Handler(Looper.getMainLooper()).postDelayed({
@@ -226,7 +224,8 @@ class GpsTrackingService : Service() {
             currentState = AppState.IDLE
             updateNotification("IDLE - Next update scheduled")
         } else {
-            updateNotification("AWAKE - Waiting for next minute")
+            currentState = AppState.AWAKE
+            updateNotification("AWAKE - Waiting for next alarm")
         }
 
         broadcastStateUpdate()
@@ -235,6 +234,34 @@ class GpsTrackingService : Service() {
         scheduleNextLocationAlarm()
 
         isProcessingLocation = false
+
+        // Release WakeLock
+        releaseWakeLock()
+
+        // Stop the service completely - alarm will restart it when needed
+        Log.d(TAG, "Location processing complete, stopping service")
+        stopSelf()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        Log.d(TAG, "Service destroyed")
+
+        // Don't cancel alarm here - we want it to fire again!
+        // The alarm is only cancelled when explicitly stopping the tracking (not implemented yet)
+        releaseWakeLock()
+    }
+
+    private fun logError(module: String, message: String) {
+        val error = ErrorEntry(System.currentTimeMillis(), module, message)
+        errorLog.offer(error)
+
+        while (errorLog.size > MAX_ERROR_LOG_SIZE) {
+            errorLog.poll()
+        }
+
+        Log.e(TAG, "[$module] $message")
+        broadcastStateUpdate()
     }
 
     private fun scheduleNextLocationAlarm() {
@@ -252,13 +279,19 @@ class GpsTrackingService : Service() {
     }
 
     private fun acquireWakeLock() {
+        if (wakeLock?.isHeld == true) {
+            Log.d(TAG, "WakeLock already held")
+            return
+        }
+
         val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
         wakeLock = powerManager.newWakeLock(
             PowerManager.PARTIAL_WAKE_LOCK,
-            "GPSTracker::WakeLock"
+            "GPSTracker::LocationUpdate"
         )
-        wakeLock?.acquire(24 * 60 * 60 * 1000L) // 24 hours
-        Log.d(TAG, "WakeLock acquired")
+        // Acquire for max 2 minutes - enough time to get location and send data
+        wakeLock?.acquire(2 * 60 * 1000L)
+        Log.d(TAG, "WakeLock acquired for 2 minutes")
     }
 
     private fun releaseWakeLock() {
@@ -375,5 +408,6 @@ class GpsTrackingService : Service() {
         private const val CHANNEL_ID = "gps_tracking_channel"
         private const val NOTIFICATION_ID = 1
         const val ACTION_STATE_UPDATE = "ovh.tenjo.gpstracker.STATE_UPDATE"
+        const val ACTION_INITIAL_SETUP = "ovh.tenjo.gpstracker.INITIAL_SETUP"
     }
 }
