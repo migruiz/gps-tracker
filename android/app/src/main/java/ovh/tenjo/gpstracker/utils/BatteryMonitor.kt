@@ -23,28 +23,18 @@ class BatteryMonitor(private val context: Context) {
         }
     }
 
-    fun isCharging(): Boolean {
-        val batteryStatus: Intent? = IntentFilter(Intent.ACTION_BATTERY_CHANGED).let { filter ->
-            context.registerReceiver(null, filter)
-        }
 
-        val status = batteryStatus?.getIntExtra(BatteryManager.EXTRA_STATUS, -1) ?: -1
-        return status == BatteryManager.BATTERY_STATUS_CHARGING ||
-               status == BatteryManager.BATTERY_STATUS_FULL
-    }
 
     fun getBatteryInfo(): BatteryInfo {
         val level = getBatteryLevel()
-        val charging = isCharging()
 
-        Log.d(TAG, "Battery: $level%, Charging: $charging")
+        Log.d(TAG, "Battery: $level%")
 
-        return BatteryInfo(level, charging)
+        return BatteryInfo(level)
     }
 
     data class BatteryInfo(
-        val level: Int,
-        val isCharging: Boolean
+        val level: Int
     )
 
     companion object {

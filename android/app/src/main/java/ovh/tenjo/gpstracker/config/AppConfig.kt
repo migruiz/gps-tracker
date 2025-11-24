@@ -15,15 +15,18 @@ object AppConfig {
     const val GPS_UPDATE_INTERVAL_MS = 10000L // 30 seconds
     const val GPS_FASTEST_INTERVAL_MS = 15000L // 15 seconds
 
-    // Battery Configuration
-    const val BATTERY_CHECK_INTERVAL_MS = 3600000L // 1 hour
-    const val BATTERY_LOW_THRESHOLD = 95 // 20% battery level
+
+
+    // Phone Configuration - Whitelisted contacts
+    // TODO: Replace these with actual phone numbers before deployment
+    const val MOM_PHONE_NUMBER = "+353894108085"
+    const val DAD_PHONE_NUMBER = "+353894195242"
 
     // Awake Time Slots (hardcoded schedule)
     val AWAKE_TIME_SLOTS = listOf(
-        TimeSlot(8, 0, 11, 0),     // 08:00 -> 09:00
-        TimeSlot(15, 0, 17, 0),   // 14:00 -> 15:00
-        TimeSlot(17, 0, 22, 0)    // 18:00 -> 19:00
+        TimeSlot(7, 50, 8, 40),
+        TimeSlot(14, 10, 15, 0),
+        TimeSlot(18, 45, 23, 59)
     )
 
     // Check if current time is within any awake time slot

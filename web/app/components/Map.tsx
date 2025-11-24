@@ -11,6 +11,7 @@ interface LocationData {
   timestamp: number;
   provider: string;
   device_id: string;
+  battery_level?: number;
 }
 
 export default function Map() {
@@ -177,6 +178,7 @@ export default function Map() {
           <strong>Current Position</strong><br>
           <strong>Time:</strong> ${timestamp}<br>
           <strong>Ago:</strong> ${timeAgo}<br>
+          <strong>Battery Level:</strong> ${currentLocation.battery_level !== undefined ? currentLocation.battery_level.toFixed(1) + '%' : 'N/A'}<br>
           <strong>Accuracy:</strong> ${currentLocation.accuracy.toFixed(1)}m
         </div>
       `,
@@ -234,6 +236,7 @@ export default function Map() {
             <div style="padding: 8px;">
               <strong>Time:</strong> ${timestamp}<br>
               <strong>Ago:</strong> ${timeAgo}<br>
+              <strong>Battery Level:</strong> ${location.battery_level !== undefined ? location.battery_level.toFixed(1) + '%' : 'N/A'}<br>
               <strong>Accuracy:</strong> ${location.accuracy.toFixed(1)}m
             </div>
           `,

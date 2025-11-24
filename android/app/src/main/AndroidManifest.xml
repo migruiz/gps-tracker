@@ -11,6 +11,14 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
 
+    <!-- Permissions for phone and call management -->
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <uses-permission android:name="android.permission.CALL_PHONE" />
+    <uses-permission android:name="android.permission.ANSWER_PHONE_CALLS" />
+    <uses-permission android:name="android.permission.READ_CALL_LOG" />
+    <uses-permission android:name="android.permission.MANAGE_OWN_CALLS" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+
     <!-- Permissions for network and connectivity -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
@@ -43,6 +51,7 @@
 
     <application
         android:allowBackup="true"
+        android:testOnly="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
@@ -78,6 +87,20 @@
             </intent-filter>
         </receiver>
 
+        <!-- Phone Call Receiver for call blocking and whitelisting -->
+        <receiver
+            android:name=".receiver.PhoneCallReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.PHONE_STATE" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Location Alarm Receiver for scheduled GPS updates -->
+        <receiver
+            android:name=".receiver.LocationAlarmReceiver"
+            android:exported="false" />
+
         <!-- Foreground Service for GPS tracking -->
         <service
             android:name=".service.GpsTrackingService"
@@ -95,6 +118,5 @@
         </service>
     </application>
 
-    <uses-permission android:name="android.permission.BIND_VPN_SERVICE" />
 
 </manifest>
