@@ -41,6 +41,7 @@ class SinkholeVpnService : VpnService() {
 
             // ONLY allow your intended app
             builder.addDisallowedApplication("ovh.tenjo.gpstracker")
+            //builder.addDisallowedApplication("com.google.android.gms")
 
             // Establish dummy TUN
             vpnInterface = builder.establish()
