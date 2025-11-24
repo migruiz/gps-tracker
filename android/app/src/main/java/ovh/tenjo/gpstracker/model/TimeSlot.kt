@@ -1,5 +1,7 @@
 package ovh.tenjo.gpstracker.model
 
+import java.util.Calendar
+
 data class TimeSlot(
     val startHour: Int,
     val startMinute: Int,
@@ -14,8 +16,15 @@ data class TimeSlot(
         return currentMinutes in startMinutes until endMinutes
     }
 
+    fun isInTimeSlot(hour: Int, minute: Int, dayOfWeek: Int): Boolean {
+        // Check if it's a weekday (Monday=2, Friday=6 in Calendar)
+        if (dayOfWeek < Calendar.MONDAY || dayOfWeek > Calendar.FRIDAY) {
+            return false
+        }
+        return isInTimeSlot(hour, minute)
+    }
+
     override fun toString(): String {
         return String.format("%02d:%02d -> %02d:%02d", startHour, startMinute, endHour, endMinute)
     }
 }
-

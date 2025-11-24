@@ -56,28 +56,55 @@ class AlarmScheduler(private val context: Context) {
 
         // Check up to 7 days ahead to find next awake slot
         for (dayOffset in 0..7) {
-            for (timeSlot in AppConfig.AWAKE_TIME_SLOTS) {
-                val testCalendar = startCalendar.clone() as Calendar
-                testCalendar.add(Calendar.DAY_OF_YEAR, dayOffset)
-                testCalendar.set(Calendar.HOUR_OF_DAY, timeSlot.startHour)
-                testCalendar.set(Calendar.MINUTE, timeSlot.startMinute)
-                testCalendar.set(Calendar.SECOND, 0)
-                testCalendar.set(Calendar.MILLISECOND, 0)
+            val testCalendar = startCalendar.clone() as Calendar
+            testCalendar.add(Calendar.DAY_OF_YEAR, dayOffset)
 
-                if (testCalendar.after(startCalendar)) {
-                    calendar.timeInMillis = testCalendar.timeInMillis
+            val dayOfWeek = testCalendar.get(Calendar.DAY_OF_WEEK)
+
+            // Skip weekends (Saturday=7, Sunday=1)
+            if (dayOfWeek == Calendar.SATURDAY || dayOfWeek == Calendar.SUNDAY) {
+                continue
+            }
+
+            for (timeSlot in AppConfig.AWAKE_TIME_SLOTS) {
+                val slotCalendar = testCalendar.clone() as Calendar
+                slotCalendar.set(Calendar.HOUR_OF_DAY, timeSlot.startHour)
+                slotCalendar.set(Calendar.MINUTE, timeSlot.startMinute)
+                slotCalendar.set(Calendar.SECOND, 0)
+                slotCalendar.set(Calendar.MILLISECOND, 0)
+
+                if (slotCalendar.after(startCalendar)) {
+                    calendar.timeInMillis = slotCalendar.timeInMillis
+                    Log.d(TAG, "Next awake time scheduled for: ${calendar.time} (Day: ${getDayName(calendar.get(Calendar.DAY_OF_WEEK))})")
                     return
                 }
             }
         }
 
-        // Fallback: schedule for tomorrow at first time slot
+        // Fallback: schedule for next Monday at first time slot
         calendar.add(Calendar.DAY_OF_YEAR, 1)
+        while (calendar.get(Calendar.DAY_OF_WEEK) != Calendar.MONDAY) {
+            calendar.add(Calendar.DAY_OF_YEAR, 1)
+        }
         val firstSlot = AppConfig.AWAKE_TIME_SLOTS.first()
         calendar.set(Calendar.HOUR_OF_DAY, firstSlot.startHour)
         calendar.set(Calendar.MINUTE, firstSlot.startMinute)
         calendar.set(Calendar.SECOND, 0)
         calendar.set(Calendar.MILLISECOND, 0)
+        Log.d(TAG, "Fallback: scheduling for Monday at first time slot: ${calendar.time}")
+    }
+
+    private fun getDayName(dayOfWeek: Int): String {
+        return when (dayOfWeek) {
+            Calendar.SUNDAY -> "Sunday"
+            Calendar.MONDAY -> "Monday"
+            Calendar.TUESDAY -> "Tuesday"
+            Calendar.WEDNESDAY -> "Wednesday"
+            Calendar.THURSDAY -> "Thursday"
+            Calendar.FRIDAY -> "Friday"
+            Calendar.SATURDAY -> "Saturday"
+            else -> "Unknown"
+        }
     }
 
     private fun scheduleAlarm(triggerAtMillis: Long) {

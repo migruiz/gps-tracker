@@ -1,6 +1,7 @@
 package ovh.tenjo.gpstracker.config
 
 import ovh.tenjo.gpstracker.model.TimeSlot
+import java.util.Calendar
 
 object AppConfig {
     // Debug Configuration
@@ -28,8 +29,19 @@ object AppConfig {
         TimeSlot(14, 10, 15, 0),
     )
 
-    // Check if current time is within any awake time slot
+    // Check if current time is within any awake time slot (Monday-Friday only)
     fun isAwakeTime(hour: Int, minute: Int): Boolean {
+        val calendar = Calendar.getInstance()
+        val dayOfWeek = calendar.get(Calendar.DAY_OF_WEEK)
+        return isAwakeTime(hour, minute, dayOfWeek)
+    }
+
+    // Check if specified time and day is within any awake time slot (Monday-Friday only)
+    fun isAwakeTime(hour: Int, minute: Int, dayOfWeek: Int): Boolean {
+        // Only active on weekdays (Monday=2 to Friday=6)
+        if (dayOfWeek < Calendar.MONDAY || dayOfWeek > Calendar.FRIDAY) {
+            return false
+        }
         return AWAKE_TIME_SLOTS.any { it.isInTimeSlot(hour, minute) }
     }
 }
