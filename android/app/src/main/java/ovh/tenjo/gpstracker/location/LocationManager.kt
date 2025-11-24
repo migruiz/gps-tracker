@@ -141,7 +141,7 @@ class LocationManager(private val context: Context) {
             val cancellationTokenSource = CancellationTokenSource()
 
             fusedLocationClient.getCurrentLocation(
-                Priority.PRIORITY_HIGH_ACCURACY,
+                Priority.PRIORITY_BALANCED_POWER_ACCURACY,
                 cancellationTokenSource.token
             ).addOnSuccessListener { location ->
                 if (location != null) {
