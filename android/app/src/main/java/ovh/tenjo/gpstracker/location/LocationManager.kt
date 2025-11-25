@@ -9,7 +9,6 @@ import android.util.Log
 import androidx.core.app.ActivityCompat
 import com.google.android.gms.location.*
 import com.google.android.gms.tasks.CancellationTokenSource
-import ovh.tenjo.gpstracker.config.AppConfig
 
 class LocationManager(private val context: Context) {
 
@@ -17,95 +16,13 @@ class LocationManager(private val context: Context) {
         LocationServices.getFusedLocationProviderClient(context)
     }
 
-    private var locationCallback: LocationCallback? = null
-    private var isTracking = false
 
-    interface LocationUpdateListener {
-        fun onLocationUpdate(location: Location, provider: String)
-        fun onLocationError(error: String)
-    }
 
     interface SingleLocationListener {
         fun onLocationReceived(location: Location, provider: String)
         fun onLocationTimeout(error: String)
     }
 
-    private var listener: LocationUpdateListener? = null
-
-    fun setLocationUpdateListener(listener: LocationUpdateListener) {
-        this.listener = listener
-    }
-
-    fun startLocationUpdates() {
-        if (!hasLocationPermission()) {
-            Log.e(TAG, "Location permission not granted")
-            listener?.onLocationError("Location permission not granted")
-            return
-        }
-
-        if (isTracking) {
-            Log.d(TAG, "Already tracking location")
-            return
-        }
-
-        // Create location request
-        val locationRequest = LocationRequest.Builder(
-            Priority.PRIORITY_BALANCED_POWER_ACCURACY,
-            AppConfig.GPS_UPDATE_INTERVAL_MS
-        ).apply {
-            setMinUpdateIntervalMillis(AppConfig.GPS_UPDATE_INTERVAL_MS / 2)
-            setWaitForAccurateLocation(false)
-        }.build()
-
-        locationCallback = object : LocationCallback() {
-            override fun onLocationResult(locationResult: LocationResult) {
-                locationResult.lastLocation?.let { location ->
-                    val provider = location.provider ?: "fused"
-                    Log.d(TAG, "Location update from $provider: ${location.latitude}, ${location.longitude}, accuracy: ${location.accuracy}m")
-                    listener?.onLocationUpdate(location, provider)
-                }
-            }
-
-            override fun onLocationAvailability(availability: LocationAvailability) {
-                Log.d(TAG, "Location availability changed: ${availability.isLocationAvailable}")
-                if (!availability.isLocationAvailable) {
-                    listener?.onLocationError("Location unavailable")
-                }
-            }
-        }
-
-        try {
-            fusedLocationClient.requestLocationUpdates(
-                locationRequest,
-                locationCallback!!,
-                Looper.getMainLooper()
-            ).addOnSuccessListener {
-                isTracking = true
-                Log.d(TAG, "Started location updates with Fused Location Provider (interval: ${AppConfig.GPS_UPDATE_INTERVAL_MS}ms)")
-            }.addOnFailureListener { e ->
-                Log.e(TAG, "Failed to request location updates", e)
-                listener?.onLocationError("Failed to start location updates: ${e.message}")
-            }
-        } catch (e: SecurityException) {
-            Log.e(TAG, "Security exception starting location updates", e)
-            listener?.onLocationError("Security exception: ${e.message}")
-        }
-    }
-
-    fun stopLocationUpdates() {
-        if (!isTracking) {
-            Log.d(TAG, "Not tracking location")
-            return
-        }
-
-        locationCallback?.let {
-            fusedLocationClient.removeLocationUpdates(it)
-            isTracking = false
-            Log.d(TAG, "Stopped location updates")
-        }
-    }
-
-    fun isTracking(): Boolean = isTracking
 
     private fun hasLocationPermission(): Boolean {
         val hasFineLocation = ActivityCompat.checkSelfPermission(
