@@ -65,7 +65,6 @@ class LocationManager(private val context: Context) {
 
         val locationCallback = object : LocationCallback() {
             override fun onLocationResult(result: LocationResult) {
-                return
                 if (isFinished) return
                 isFinished = true
                 handler.removeCallbacksAndMessages(null)
