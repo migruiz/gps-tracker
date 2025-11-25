@@ -8,7 +8,6 @@ import android.os.Looper
 import android.util.Log
 import androidx.core.app.ActivityCompat
 import com.google.android.gms.location.*
-import com.google.android.gms.tasks.CancellationTokenSource
 
 class LocationManager(private val context: Context) {
 
@@ -43,7 +42,7 @@ class LocationManager(private val context: Context) {
 
     /**
      * Request a single location update with timeout
-     * Uses getCurrentLocation which automatically handles best provider selection
+     * Uses requestLocationUpdates for reliability in a Service context
      */
     fun requestSingleLocation(callback: SingleLocationListener, timeoutMs: Long = 30000L) {
         if (!hasLocationPermission()) {
@@ -52,15 +51,27 @@ class LocationManager(private val context: Context) {
             return
         }
 
-        Log.d(TAG, "Requesting single location with ${timeoutMs}ms timeout")
+        Log.d(TAG, "Requesting single location with ${timeoutMs}ms timeout (requestLocationUpdates)")
 
-        try {
-            val cancellationTokenSource = CancellationTokenSource()
+        val locationRequest = LocationRequest.Builder(
+            Priority.PRIORITY_BALANCED_POWER_ACCURACY, 10000L
+        )
+            .setMaxUpdates(1)
+            .setMinUpdateIntervalMillis(0)
+            .build()
 
-            fusedLocationClient.getCurrentLocation(
-                Priority.PRIORITY_BALANCED_POWER_ACCURACY,
-                cancellationTokenSource.token
-            ).addOnSuccessListener { location ->
+        val handler = android.os.Handler(Looper.getMainLooper())
+        var isFinished = false
+
+        val locationCallback = object : LocationCallback() {
+            override fun onLocationResult(result: LocationResult) {
+                return
+                if (isFinished) return
+                isFinished = true
+                handler.removeCallbacksAndMessages(null)
+                fusedLocationClient.removeLocationUpdates(this)
+
+                val location = result.lastLocation
                 if (location != null) {
                     val provider = location.provider ?: "fused"
                     Log.i(TAG, "Single location received from $provider: ${location.latitude}, ${location.longitude}, accuracy: ${location.accuracy}m")
@@ -69,14 +80,26 @@ class LocationManager(private val context: Context) {
                     Log.e(TAG, "Single location request returned null")
                     callback.onLocationTimeout("Location unavailable")
                 }
-            }.addOnFailureListener { e ->
-                Log.e(TAG, "Failed to get single location", e)
-                callback.onLocationTimeout("Failed to get location: ${e.message}")
             }
 
-            // Handle timeout
-            android.os.Handler(Looper.getMainLooper()).postDelayed({
-                cancellationTokenSource.cancel()
+            override fun onLocationAvailability(availability: LocationAvailability) {
+                Log.d(TAG, "Location availability: ${availability.isLocationAvailable}")
+            }
+        }
+
+        try {
+            fusedLocationClient.requestLocationUpdates(
+                locationRequest,
+                locationCallback,
+                Looper.getMainLooper()
+            )
+
+            handler.postDelayed({
+                if (isFinished) return@postDelayed
+                isFinished = true
+                fusedLocationClient.removeLocationUpdates(locationCallback)
+                Log.e(TAG, "Location request timed out after ${timeoutMs}ms")
+                callback.onLocationTimeout("Location request timed out")
             }, timeoutMs)
         } catch (e: SecurityException) {
             Log.e(TAG, "Security exception requesting single location", e)
