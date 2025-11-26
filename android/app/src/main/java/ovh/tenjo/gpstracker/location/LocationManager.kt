@@ -11,15 +11,9 @@ import com.google.android.gms.location.*
 
 class LocationManager(private val context: Context) {
 
-    private val fusedLocationClient: FusedLocationProviderClient by lazy {
-        LocationServices.getFusedLocationProviderClient(context)
-    }
-
-
-
     interface SingleLocationListener {
         fun onLocationReceived(location: Location, provider: String)
-        fun onLocationTimeout(error: String)
+        fun onError(error: String)
     }
 
 
@@ -47,62 +41,46 @@ class LocationManager(private val context: Context) {
     fun requestSingleLocation(callback: SingleLocationListener, timeoutMs: Long = 30000L) {
         if (!hasLocationPermission()) {
             Log.e(TAG, "Location permission not granted")
-            callback.onLocationTimeout("Location permission not granted")
+            callback.onError("Location permission not granted")
             return
         }
 
         Log.d(TAG, "Requesting single location with ${timeoutMs}ms timeout (requestLocationUpdates)")
 
-        val locationRequest = LocationRequest.Builder(
-            Priority.PRIORITY_BALANCED_POWER_ACCURACY, 10000L
-        )
-            .setMaxUpdates(1)
-            .setMinUpdateIntervalMillis(0)
-            .build()
+        val fusedLocationClient = LocationServices.getFusedLocationProviderClient(context)
 
-        val handler = android.os.Handler(Looper.getMainLooper())
         var isFinished = false
-
-        val locationCallback = object : LocationCallback() {
-            override fun onLocationResult(result: LocationResult) {
-                if (isFinished) return
-                isFinished = true
-                handler.removeCallbacksAndMessages(null)
-                fusedLocationClient.removeLocationUpdates(this)
-
-                val location = result.lastLocation
-                if (location != null) {
-                    val provider = location.provider ?: "fused"
-                    Log.i(TAG, "Single location received from $provider: ${location.latitude}, ${location.longitude}, accuracy: ${location.accuracy}m")
-                    callback.onLocationReceived(location, provider)
-                } else {
-                    Log.e(TAG, "Single location request returned null")
-                    callback.onLocationTimeout("Location unavailable")
-                }
-            }
-
-            override fun onLocationAvailability(availability: LocationAvailability) {
-                Log.d(TAG, "Location availability: ${availability.isLocationAvailable}")
-            }
+        val handler = android.os.Handler(Looper.getMainLooper())
+        val timeoutRunnable = Runnable {
+            if (isFinished) return@Runnable
+            isFinished = true
+            Log.e(TAG, "Location request timed out after ${timeoutMs}ms")
+            callback.onError("Location request timed out")
         }
+        handler.postDelayed(timeoutRunnable, timeoutMs)
 
         try {
-            fusedLocationClient.requestLocationUpdates(
-                locationRequest,
-                locationCallback,
-                Looper.getMainLooper()
-            )
-
-            handler.postDelayed({
-                if (isFinished) return@postDelayed
-                isFinished = true
-                fusedLocationClient.removeLocationUpdates(locationCallback)
-                Log.e(TAG, "Location request timed out after ${timeoutMs}ms")
-                callback.onLocationTimeout("Location request timed out")
-            }, timeoutMs)
+            fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null)
+                .addOnSuccessListener { location ->
+                    if (isFinished) return@addOnSuccessListener
+                    isFinished = true
+                    if (location != null) {
+                        val provider = location.provider ?: "fused"
+                        Log.i(TAG, "Single location received from $provider: ${location.latitude}, ${location.longitude}, accuracy: ${location.accuracy}m")
+                        callback.onLocationReceived(location, provider)
+                    } else {
+                        Log.e(TAG, "Single location request returned null")
+                        callback.onError("Location unavailable")
+                    }
+                }.addOnFailureListener { e ->
+                    if (isFinished) return@addOnFailureListener
+                    isFinished = true
+                    Log.e(TAG, "Failed to get single location", e)
+                    callback.onError("Failed to get location: ${e.message}")
+                }
         } catch (e: SecurityException) {
             Log.e(TAG, "Security exception requesting single location", e)
-            callback.onLocationTimeout("Security exception: ${e.message}")
+            callback.onError("Security exception: ${e.message}")
         }
     }
 

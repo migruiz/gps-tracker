@@ -182,7 +182,7 @@ class GpsTrackingService : Service() {
                 updateNotification("Location sent ($provider)")
             }
 
-            override fun onLocationTimeout(error: String) {
+            override fun onError(error: String) {
                 Log.e(TAG, "Location timeout: $error")
                 logError("Location", error)
                 updateNotification("Location error: $error")
