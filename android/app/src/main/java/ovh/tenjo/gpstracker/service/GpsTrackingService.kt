@@ -192,7 +192,7 @@ class GpsTrackingService : Service() {
                     cleanupAfterLocationUpdate()
                 }, 500)
             }
-        }, 30000L) // 30 second timeout
+        }, 10000L)
     }
 
     private fun cleanupAfterLocationUpdate() {
